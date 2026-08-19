@@ -11,9 +11,9 @@
 //! name with its own arbitrary trailing args — a shape a static subcommand
 //! enum doesn't fit.
 //!
-//! RESERVED NAMES: `install`, `uninstall`, `list`, `help`, `-h`, `--help`,
-//! `-v`, `--version` are built-ins and can never be package names. A package
-//! named one of these would be permanently unreachable via dispatch.
+//! RESERVED NAMES: `install`, `uninstall`, `upgrade`, `list`, `help`, `-h`,
+//! `--help`, `-v`, `--version` are built-ins and can never be package names.
+//! A package named one of these would be permanently unreachable via dispatch.
 
 mod download;
 mod error;
@@ -59,6 +59,7 @@ fn run(args: &[String]) -> Result<i32> {
         }
         "install" => cmd_install(&args[2..]),
         "uninstall" => cmd_uninstall(&args[2..]),
+        "upgrade" => cmd_upgrade(&args[2..]),
         "list" => package::list().map(|_| 0),
         // A flag-looking first arg is never a package name — a typo like
         // `cdlvsm -x` should be "unknown command", not "install a package
@@ -123,6 +124,29 @@ fn cmd_uninstall(rest: &[String]) -> Result<i32> {
     Ok(0)
 }
 
+/// `cdlvsm upgrade [package]` — update one package, or all installed
+/// packages when no name is given. No flags: install settings (tier, --link)
+/// come from the recorded metadata; to change them, re-run `cdlvsm install`.
+fn cmd_upgrade(rest: &[String]) -> Result<i32> {
+    // Any flag-looking arg is an error — upgrade takes no flags.
+    for arg in rest {
+        if arg.starts_with('-') {
+            eprintln!("error: unknown flag '{arg}' for 'cdlvsm upgrade'");
+            print_usage();
+            return Ok(1);
+        }
+    }
+    if rest.len() > 1 {
+        eprintln!("error: 'cdlvsm upgrade' takes at most one package name");
+        print_usage();
+        return Ok(1);
+    }
+    match rest.first() {
+        Some(name) => package::upgrade(name).map(|_| 0),
+        None => package::upgrade_all().map(|_| 0),
+    }
+}
+
 /// Dispatch to an installed package's binary, replacing this process.
 fn dispatch(name: &str, rest: &[String]) -> Result<i32> {
     let target = paths::dispatch_target(name);
@@ -169,6 +193,7 @@ fn print_usage() {
     println!("Usage:");
     println!("  cdlvsm install <package> [--runtime] [--link]");
     println!("  cdlvsm uninstall <package>");
+    println!("  cdlvsm upgrade [package]");
     println!("  cdlvsm list");
     println!("  cdlvsm <package> <args...>       run an installed package's binary");
     println!();
@@ -181,6 +206,9 @@ fn print_usage() {
     println!("  --runtime   install code's Runtime tier instead of the default SDK tier");
     println!("  --link      also create a bare `<package>` command in $PREFIX/bin (opt-in;");
     println!("              for `code` this avoids colliding with VS Code's own `code` CLI)");
+    println!();
+    println!("  `upgrade` takes no flags — it reuses the recorded install settings.");
+    println!("  To change tier/--link, re-run `cdlvsm install <package>` with flags.");
     println!();
     println!("Env:");
     println!("  PREFIX                   install root (default: $HOME/.local)");

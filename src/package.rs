@@ -36,6 +36,30 @@ impl Package {
             Package::Euglena => install_euglena(opts),
         }
     }
+
+    /// Default install settings for a package whose `.cdlvsm` metadata is
+    /// missing (installed by an older cdlvsm): the SDK tier, no bare link.
+    /// `upgrade` falls back to these with a warning rather than failing.
+    fn default_meta(self) -> InstallMeta {
+        match self {
+            Package::Code => InstallMeta {
+                pkg: "code".into(),
+                repo: CODE_REPO.into(),
+                asset_base: "code-sdk".into(),
+                env_var: "CDLVSM_CODE_VERSION".into(),
+                label: Some("sdk".into()),
+                link: false,
+            },
+            Package::Euglena => InstallMeta {
+                pkg: "euglena".into(),
+                repo: EUGLENA_REPO.into(),
+                asset_base: "euglena".into(),
+                env_var: "CDLVSM_EUGLENA_VERSION".into(),
+                label: None,
+                link: false,
+            },
+        }
+    }
 }
 
 pub struct InstallOpts {
@@ -58,10 +82,131 @@ impl Tier {
     }
 }
 
+/// How a package was installed, recorded in the `.cdlvsm` metadata file so
+/// `upgrade` can reuse the exact settings (a `--runtime` install must not be
+/// silently reset to SDK). Written by `install_release` on every successful
+/// install/upgrade; read by `upgrade`.
+#[derive(Clone)]
+struct InstallMeta {
+    pkg: String,
+    repo: String,
+    asset_base: String,
+    env_var: String,
+    label: Option<String>,
+    link: bool,
+}
+
+impl InstallMeta {
+    fn from_spec(spec: &ReleaseSpec) -> InstallMeta {
+        InstallMeta {
+            pkg: spec.pkg.to_string(),
+            repo: spec.repo.to_string(),
+            asset_base: spec.asset_base.to_string(),
+            env_var: spec.env_var.to_string(),
+            label: spec.label.map(str::to_string),
+            link: spec.link,
+        }
+    }
+}
+
+/// Read the `.cdlvsm` metadata file for `pkg`. `Ok(None)` when the file is
+/// absent (an install by an older cdlvsm); `Err` only on a genuinely
+/// unreadable file.
+fn read_meta(pkg: &str) -> Result<Option<InstallMeta>> {
+    let path = paths::metadata_path(pkg);
+    let body = match fs::read_to_string(&path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return fail(format!(
+                "could not read install metadata {}: {e}",
+                path.display()
+            ))
+        }
+    };
+
+    let mut meta: Option<InstallMeta> = None;
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (key, value) = match line.split_once('=') {
+            Some(kv) => kv,
+            None => continue, // tolerate malformed lines
+        };
+        match key {
+            "pkg" => {
+                meta = Some(InstallMeta {
+                    pkg: value.to_string(),
+                    repo: String::new(),
+                    asset_base: String::new(),
+                    env_var: String::new(),
+                    label: None,
+                    link: false,
+                });
+            }
+            "repo" => {
+                if let Some(m) = meta.as_mut() {
+                    m.repo = value.to_string();
+                }
+            }
+            "asset_base" => {
+                if let Some(m) = meta.as_mut() {
+                    m.asset_base = value.to_string();
+                }
+            }
+            "env_var" => {
+                if let Some(m) = meta.as_mut() {
+                    m.env_var = value.to_string();
+                }
+            }
+            "label" => {
+                if !value.is_empty() {
+                    if let Some(m) = meta.as_mut() {
+                        m.label = Some(value.to_string());
+                    }
+                }
+            }
+            "link" => {
+                if let Some(m) = meta.as_mut() {
+                    m.link = value == "1";
+                }
+            }
+            _ => {} // unknown keys are ignored (forward compatibility)
+        }
+    }
+
+    match meta {
+        Some(m) if !m.pkg.is_empty() && !m.repo.is_empty() && !m.asset_base.is_empty() => {
+            Ok(Some(m))
+        }
+        _ => Ok(None), // present but unusable — treat as absent
+    }
+}
+
+/// Write the `.cdlvsm` metadata file for `meta.pkg`.
+fn write_meta(meta: &InstallMeta) -> Result<()> {
+    let path = paths::metadata_path(&meta.pkg);
+    let mut body = format!(
+        "pkg={}\nrepo={}\nasset_base={}\nenv_var={}\n",
+        meta.pkg, meta.repo, meta.asset_base, meta.env_var
+    );
+    match &meta.label {
+        Some(label) => body.push_str(&format!("label={label}\n")),
+        None => body.push_str("label=\n"),
+    }
+    body.push_str(&format!("link={}\n", if meta.link { 1 } else { 0 }));
+    fs::write(&path, body)
+        .map_err(|e| crate::error::CdlvsmError(format!("write {}: {e}", path.display())))
+}
+
 /// One package's release-fetch parameters. The binary inside the tarball, the
 /// installed package dir, and the shim name are all `pkg`; `asset_base` is the
 /// tarball/stage-dir prefix (which for `code` carries a tier infix, e.g.
-/// `code-sdk`, and for `euglena` is just `euglena`).
+/// `code-sdk`, and for `euglena` is just `euglena`). `env_var` is the
+/// version-pin env var recorded in the metadata file; `verb`/`old` shape the
+/// final message ("Installed …" vs "Upgraded … v0.2.0 -> v0.3.0").
 struct ReleaseSpec<'a> {
     pkg: &'a str,
     repo: &'a str,
@@ -69,6 +214,9 @@ struct ReleaseSpec<'a> {
     tag: &'a str,
     label: Option<&'a str>,
     link: bool,
+    env_var: &'a str,
+    verb: &'a str,
+    old: Option<&'a str>,
 }
 
 fn install_code(opts: &InstallOpts) -> Result<()> {
@@ -81,6 +229,9 @@ fn install_code(opts: &InstallOpts) -> Result<()> {
         tag: &tag,
         label: Some(tier),
         link: opts.link,
+        env_var: "CDLVSM_CODE_VERSION",
+        verb: "Installed",
+        old: None,
     })
 }
 
@@ -93,6 +244,9 @@ fn install_euglena(opts: &InstallOpts) -> Result<()> {
         tag: &tag,
         label: None,
         link: opts.link,
+        env_var: "CDLVSM_EUGLENA_VERSION",
+        verb: "Installed",
+        old: None,
     })
 }
 
@@ -177,15 +331,29 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
         force_symlink(&target, &bin.join(spec.pkg))?;
     }
 
+    // Record how this package was installed so `upgrade` can reuse the exact
+    // settings (tier, link, repo, asset base, version-pin env var).
+    write_meta(&InstallMeta::from_spec(spec))?;
+
     eprintln!();
-    match spec.label {
-        Some(label) => eprintln!(
-            "Installed {} ({label}) {} -> {}",
-            spec.pkg,
-            spec.tag,
-            dest.display()
-        ),
-        None => eprintln!("Installed {} {} -> {}", spec.pkg, spec.tag, dest.display()),
+    match (spec.verb, spec.old) {
+        ("Upgraded", Some(old)) => match spec.label {
+            Some(label) => eprintln!("Upgraded {} ({label}) {old} -> {}", spec.pkg, spec.tag),
+            None => eprintln!("Upgraded {} {old} -> {}", spec.pkg, spec.tag),
+        },
+        ("Upgraded", None) => match spec.label {
+            Some(label) => eprintln!("Upgraded {} ({label}) -> {}", spec.pkg, spec.tag),
+            None => eprintln!("Upgraded {} -> {}", spec.pkg, spec.tag),
+        },
+        _ => match spec.label {
+            Some(label) => eprintln!(
+                "Installed {} ({label}) {} -> {}",
+                spec.pkg,
+                spec.tag,
+                dest.display()
+            ),
+            None => eprintln!("Installed {} {} -> {}", spec.pkg, spec.tag, dest.display()),
+        },
     }
     eprintln!(
         "Shim: {}",
@@ -234,6 +402,106 @@ pub fn uninstall(name: &str) -> Result<()> {
 
     rm_rf(&pkg_dir);
     println!("Uninstalled {name}.");
+    Ok(())
+}
+
+/// Upgrade one package to its latest (or version-pin env var) release,
+/// reusing the recorded install settings from `.cdlvsm`. If the resolved tag
+/// equals the currently active version, the package is skipped with an
+/// "already up to date" note — no download.
+pub fn upgrade(name: &str) -> Result<()> {
+    let pkg_dir = paths::package_dir(name);
+    if !pkg_dir.exists() {
+        if Package::parse(name).is_some() {
+            return fail(format!(
+                "'{name}' is not installed — run `cdlvsm install {name}` first."
+            ));
+        }
+        return fail(format!("unknown package '{name}'"));
+    }
+
+    // Current version from the `current` symlink. A broken/missing symlink is
+    // tolerated: the upgrade proceeds with `old = None` and self-heals.
+    let current = match fs::read_link(paths::current_link(name)) {
+        Ok(t) => Some(t.to_string_lossy().into_owned()),
+        Err(_) => None,
+    };
+
+    // Install settings: recorded metadata, else (for packages this cdlvsm
+    // knows) the enum defaults with a warning.
+    let meta = match read_meta(name)? {
+        Some(m) => m,
+        None => match Package::parse(name) {
+            Some(pkg) => {
+                eprintln!(
+                    "warning: no install metadata for '{name}' (installed by an older cdlvsm); \
+                     assuming default settings"
+                );
+                pkg.default_meta()
+            }
+            None => {
+                return fail(format!(
+                    "no install metadata for '{name}' — cannot determine how to upgrade"
+                ))
+            }
+        },
+    };
+
+    let tag = resolve_tag(&meta.env_var, &meta.repo)?;
+    if let Some(cur) = &current {
+        if *cur == tag {
+            println!("{name} is already up to date ({tag})");
+            return Ok(());
+        }
+    }
+
+    install_release(&ReleaseSpec {
+        pkg: &meta.pkg,
+        repo: &meta.repo,
+        asset_base: &meta.asset_base,
+        tag: &tag,
+        label: meta.label.as_deref(),
+        link: meta.link,
+        env_var: &meta.env_var,
+        verb: "Upgraded",
+        old: current.as_deref(),
+    })
+}
+
+/// Upgrade every installed package. Per-package errors are reported and
+/// skipped; the command fails (exit 1) if any package failed.
+pub fn upgrade_all() -> Result<()> {
+    let root = paths::packages_root();
+    let entries = match fs::read_dir(&root) {
+        Ok(e) => e,
+        Err(_) => {
+            println!("No cdlvsm-managed packages installed.");
+            return Ok(());
+        }
+    };
+
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+
+    if names.is_empty() {
+        println!("No cdlvsm-managed packages installed.");
+        return Ok(());
+    }
+
+    let mut failed = 0;
+    for name in &names {
+        if let Err(e) = upgrade(name) {
+            eprintln!("error: {name}: {}", e.0);
+            failed += 1;
+        }
+    }
+    if failed > 0 {
+        return fail(format!("{failed} package(s) failed to upgrade"));
+    }
     Ok(())
 }
 

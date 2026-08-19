@@ -37,6 +37,15 @@ pub fn current_link(pkg: &str) -> PathBuf {
     package_dir(pkg).join("current")
 }
 
+/// Per-package install metadata (`.cdlvsm` key=value file): how the package
+/// was installed (repo, asset base, version-pin env var, tier label, link).
+/// `upgrade` reads it to reuse the exact settings; `install`/`upgrade` rewrite
+/// it. Lives at the package-dir level, so `uninstall`'s `rm_rf` removes it and
+/// `list` (which only iterates subdirs) never sees it.
+pub fn metadata_path(pkg: &str) -> PathBuf {
+    package_dir(pkg).join(".cdlvsm")
+}
+
 /// The binary cdlvsm dispatches to: `.../packages/<pkg>/current/<pkg>`.
 /// Binary name == package name for every package cdlvsm manages.
 pub fn dispatch_target(pkg: &str) -> PathBuf {
