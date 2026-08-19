@@ -13,6 +13,7 @@ use crate::error::{fail, Result};
 use crate::paths;
 
 const CODE_REPO: &str = "codelovesme/code";
+const EUGLENA_REPO: &str = "codelovesme/euglena-cli";
 
 #[derive(Clone, Copy)]
 pub enum Package {
@@ -32,10 +33,7 @@ impl Package {
     pub fn install(self, opts: &InstallOpts) -> Result<()> {
         match self {
             Package::Code => install_code(opts),
-            Package::Euglena => fail(
-                "'euglena' is not published yet — there's nothing to install.\n\
-                 See https://github.com/codelovesme/cdlvsm-cli for status.",
-            ),
+            Package::Euglena => install_euglena(opts),
         }
     }
 }
@@ -60,7 +58,58 @@ impl Tier {
     }
 }
 
+/// One package's release-fetch parameters. The binary inside the tarball, the
+/// installed package dir, and the shim name are all `pkg`; `asset_base` is the
+/// tarball/stage-dir prefix (which for `code` carries a tier infix, e.g.
+/// `code-sdk`, and for `euglena` is just `euglena`).
+struct ReleaseSpec<'a> {
+    pkg: &'a str,
+    repo: &'a str,
+    asset_base: &'a str,
+    tag: &'a str,
+    label: Option<&'a str>,
+    link: bool,
+}
+
 fn install_code(opts: &InstallOpts) -> Result<()> {
+    let tier = opts.tier.as_str();
+    let tag = resolve_tag("CDLVSM_CODE_VERSION", CODE_REPO)?;
+    install_release(&ReleaseSpec {
+        pkg: "code",
+        repo: CODE_REPO,
+        asset_base: &format!("code-{tier}"),
+        tag: &tag,
+        label: Some(tier),
+        link: opts.link,
+    })
+}
+
+fn install_euglena(opts: &InstallOpts) -> Result<()> {
+    let tag = resolve_tag("CDLVSM_EUGLENA_VERSION", EUGLENA_REPO)?;
+    install_release(&ReleaseSpec {
+        pkg: "euglena",
+        repo: EUGLENA_REPO,
+        asset_base: "euglena",
+        tag: &tag,
+        label: None,
+        link: opts.link,
+    })
+}
+
+/// Resolve a release tag: a non-empty version pin from `env_var`, else the
+/// repo's latest GitHub release.
+fn resolve_tag(env_var: &str, repo: &str) -> Result<String> {
+    match std::env::var(env_var) {
+        Ok(v) if !v.is_empty() => Ok(v),
+        _ => {
+            eprintln!("Fetching latest release info...");
+            latest_tag(repo)
+        }
+    }
+}
+
+/// Shared download → extract → install → symlink path for every package.
+fn install_release(spec: &ReleaseSpec) -> Result<()> {
     need("curl")?;
     need("tar")?;
 
@@ -68,21 +117,16 @@ fn install_code(opts: &InstallOpts) -> Result<()> {
     if os != "Linux" || arch != "x86_64" {
         return fail(format!(
             "prebuilt binaries are only available for Linux x86_64 (detected: {os} {arch}).\n\
-             Build from source instead — see https://github.com/{CODE_REPO}#building"
+             Build from source instead — see https://github.com/{}#building-from-source",
+            spec.repo
         ));
     }
 
-    let tier = opts.tier.as_str();
-    let tag = match std::env::var("CDLVSM_CODE_VERSION") {
-        Ok(v) if !v.is_empty() => v,
-        _ => {
-            eprintln!("Fetching latest release info...");
-            latest_tag(CODE_REPO)?
-        }
-    };
-
-    let asset = format!("code-{tier}-{tag}-x86_64-linux.tar.gz");
-    let url = format!("https://github.com/{CODE_REPO}/releases/download/{tag}/{asset}");
+    let asset = format!("{}-{}-x86_64-linux.tar.gz", spec.asset_base, spec.tag);
+    let url = format!(
+        "https://github.com/{}/releases/download/{}/{asset}",
+        spec.repo, spec.tag
+    );
 
     let tmp = mktemp()?;
     let _guard = TmpGuard(tmp.clone());
@@ -91,49 +135,64 @@ fn install_code(opts: &InstallOpts) -> Result<()> {
     download(&url, &tarball)?;
     extract(&tarball, &tmp)?;
 
-    // The tarball stages under a `code-<tier>-*` directory containing `code`.
-    let stage = find_stage(&tmp, &format!("code-{tier}-"))?;
-    let src_bin = stage.join("code");
+    // The tarball stages under an `<asset_base>-*` directory containing the
+    // package binary (named `pkg`).
+    let stage = find_stage(&tmp, &format!("{}-", spec.asset_base))?;
+    let src_bin = stage.join(spec.pkg);
     if !src_bin.exists() {
         return fail(format!(
-            "unexpected archive layout — no 'code' binary in {}",
+            "unexpected archive layout — no '{}' binary in {}",
+            spec.pkg,
             stage.display()
         ));
     }
 
-    let dest = paths::package_dir("code").join(&tag);
+    let dest = paths::package_dir(spec.pkg).join(spec.tag);
     if dest.exists() {
         rm_rf(&dest);
     }
     fs::create_dir_all(&dest)
         .map_err(|e| crate::error::CdlvsmError(format!("mkdir {}: {e}", dest.display())))?;
-    let dest_bin = dest.join("code");
+    let dest_bin = dest.join(spec.pkg);
     fs::copy(&src_bin, &dest_bin)
-        .map_err(|e| crate::error::CdlvsmError(format!("copy code binary: {e}")))?;
+        .map_err(|e| crate::error::CdlvsmError(format!("copy {} binary: {e}", spec.pkg)))?;
     // Don't trust the tarball to preserve the exec bit — exec() fails without it.
     make_executable(&dest_bin)?;
 
     // Repoint `current` -> <tag>.
-    let current = paths::current_link("code");
+    let current = paths::current_link(spec.pkg);
     let _ = fs::remove_file(&current);
-    symlink(Path::new(&tag), &current)?;
+    symlink(Path::new(spec.tag), &current)?;
 
-    // Shims. cdlvsm-code always; bare `code` only with --link (it collides with
-    // VS Code's own `code` CLI on Linux, so same-named is opt-in).
+    // Shims. cdlvsm-<pkg> always; bare `<pkg>` only with --link. For `code`
+    // this opt-in avoids colliding with VS Code's own `code` CLI on Linux;
+    // for other packages it's the same uniform rule (dispatch via
+    // `cdlvsm <pkg> …` never needs the bare name).
     let bin = paths::bin_dir();
     fs::create_dir_all(&bin)
         .map_err(|e| crate::error::CdlvsmError(format!("mkdir {}: {e}", bin.display())))?;
-    let target = paths::current_link("code").join("code");
-    force_symlink(&target, &bin.join("cdlvsm-code"))?;
-    if opts.link {
-        force_symlink(&target, &bin.join("code"))?;
+    let target = paths::current_link(spec.pkg).join(spec.pkg);
+    force_symlink(&target, &bin.join(format!("cdlvsm-{}", spec.pkg)))?;
+    if spec.link {
+        force_symlink(&target, &bin.join(spec.pkg))?;
     }
 
     eprintln!();
-    eprintln!("Installed code ({tier}) {tag} -> {}", dest.display());
-    eprintln!("Shim: {}", bin.join("cdlvsm-code").display());
-    if opts.link {
-        eprintln!("Linked: {}", bin.join("code").display());
+    match spec.label {
+        Some(label) => eprintln!(
+            "Installed {} ({label}) {} -> {}",
+            spec.pkg,
+            spec.tag,
+            dest.display()
+        ),
+        None => eprintln!("Installed {} {} -> {}", spec.pkg, spec.tag, dest.display()),
+    }
+    eprintln!(
+        "Shim: {}",
+        bin.join(format!("cdlvsm-{}", spec.pkg)).display()
+    );
+    if spec.link {
+        eprintln!("Linked: {}", bin.join(spec.pkg).display());
     }
     path_hint(&bin);
     Ok(())

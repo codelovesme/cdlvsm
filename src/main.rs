@@ -167,14 +167,15 @@ fn print_usage() {
     println!("Packages:");
     println!("  code      the Code language toolchain (SDK tier by default;");
     println!("            --runtime for the smaller LLVM-free interpreter-only build)");
-    println!("  euglena   not published yet");
+    println!("  euglena   the Euglena app CLI (scaffold/run/build Euglena apps)");
     println!();
     println!("Flags:");
     println!("  --runtime   install code's Runtime tier instead of the default SDK tier");
-    println!("  --link      also create a bare `code` command in $PREFIX/bin (opt-in:");
-    println!("              `code` collides with VS Code's own `code` CLI on Linux)");
+    println!("  --link      also create a bare `<package>` command in $PREFIX/bin (opt-in;");
+    println!("              for `code` this avoids colliding with VS Code's own `code` CLI)");
     println!();
     println!("Env:");
-    println!("  PREFIX                install root (default: $HOME/.local)");
-    println!("  CDLVSM_CODE_VERSION   pin code's version instead of latest (e.g. v0.3.0)");
+    println!("  PREFIX                   install root (default: $HOME/.local)");
+    println!("  CDLVSM_CODE_VERSION      pin code's version instead of latest (e.g. v0.3.0)");
+    println!("  CDLVSM_EUGLENA_VERSION   pin euglena's version instead of latest");
 }

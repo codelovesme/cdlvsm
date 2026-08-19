@@ -56,15 +56,22 @@ on failure, which is handled as a clean error, never a panic.
 
 `enum Package { Code, Euglena }`, consulted only by install/uninstall/list —
 dispatch is purely filesystem-based and never touches it, so an installed
-package dispatches even if a future cdlvsm wouldn't recognize its name.
+package dispatches even if a future cdlvsm wouldn't recognize its name. Both
+packages share one `install_release()` path driven by a small `ReleaseSpec`
+(repo, asset-name base, version env var, optional tier label); the two
+`install_*` functions just fill it in.
 
-- `code` installs by downloading `code-{sdk,runtime}-<tag>-x86_64-linux.tar.gz`
-  from `codelovesme/code`'s GitHub Releases (`CDLVSM_CODE_VERSION` pins a
-  version, else the latest release), extracting under a versioned dir,
-  repointing a `current` symlink, and creating a `cdlvsm-code` shim (plus a
-  bare `code` only with `--link`).
-- `euglena` is a clean hardcoded "not published yet" error — it has no
-  release artifact anywhere yet, so there is nothing to fetch.
+- `code` downloads `code-{sdk,runtime}-<tag>-x86_64-linux.tar.gz` from
+  `codelovesme/code`'s Releases (`CDLVSM_CODE_VERSION` pins a version, else
+  latest), extracts under a versioned dir, repoints a `current` symlink, and
+  creates a `cdlvsm-code` shim (plus a bare `code` only with `--link`).
+- `euglena` downloads `euglena-<tag>-x86_64-linux.tar.gz` from
+  [`codelovesme/euglena-cli`](https://github.com/codelovesme/euglena-cli)'s
+  Releases (`CDLVSM_EUGLENA_VERSION` pins a version) through the same
+  `install_release()` path — added once that repo was extracted from the
+  private `euglena-platform` monorepo and given a real release (see that
+  repo's `docs/tickets/done/1-extract-euglena-cli-to-own-repo.md`). Verified
+  end-to-end via the `real_install_euglena_roundtrip` network test.
 
 ### Download seam (`src/download.rs`)
 
@@ -108,6 +115,6 @@ Re-running `cdlvsm install <pkg>` re-fetches latest/pinned and repoints
 ## Scope / not done
 
 - Linux x86_64 only (matches the tools it installs).
-- Only `code` is really installable; `euglena` errors until it has releases.
+- `code` and `euglena` are both really installable now.
 - No package index / third-party packages — a two-entry enum is the whole
-  registry, which is right for a two-tool (one real) ecosystem today.
+  registry, which is right for a two-tool ecosystem today.

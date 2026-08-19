@@ -38,10 +38,14 @@ cdlvsm <package> <args...>       run an installed package's binary
 
 ### Packages
 
-| Package   | Status | What it is |
-|-----------|--------|------------|
-| `code`    | available | the [Code](https://github.com/codelovesme/code) language toolchain |
-| `euglena` | not published yet | `cdlvsm install euglena` errors clearly until it ships |
+| Package   | What it is |
+|-----------|------------|
+| `code`    | the [Code](https://github.com/codelovesme/code) language toolchain |
+| `euglena` | the [euglena](https://github.com/codelovesme/euglena-cli) app CLI (scaffold/run/build Euglena apps) |
+
+`euglena` runs apps through the `code` interpreter, so you'll usually want
+both: `cdlvsm install euglena && cdlvsm install code`, then point euglena at
+the installed code binary with `euglena code set ~/.local/bin/cdlvsm-code`.
 
 ### `code` install flags
 
@@ -56,9 +60,10 @@ cdlvsm <package> <args...>       run an installed package's binary
 
 - `PREFIX` — install root (default `$HOME/.local`). Packages live under
   `$PREFIX/share/cdlvsm/packages/<pkg>/<version>/`; shims under `$PREFIX/bin`.
-- `CDLVSM_CODE_VERSION` — pin `code`'s version instead of fetching the latest
-  release (e.g. `v0.3.0`). Distinct from `CDLVSM_CLI_VERSION`, which pins
-  which `cdlvsm` build the installer script fetches.
+- `CDLVSM_CODE_VERSION` / `CDLVSM_EUGLENA_VERSION` — pin a package's version
+  instead of fetching the latest release (e.g. `v0.3.0`). Distinct from
+  `CDLVSM_CLI_VERSION`, which pins which `cdlvsm` build the installer script
+  fetches.
 
 ### Updating
 

@@ -4,9 +4,9 @@
 //!   - Offline tests (error/usage/dispatch-resolution paths) — always run, no
 //!     network. These include the uninstall-safety regression, exercised with
 //!     a hand-built fake package tree so it needs no download.
-//!   - A network test that really installs `code` from GitHub Releases, gated
-//!     behind `CDLVSM_NETWORK_TESTS=1` so CI/offline runs stay fast and
-//!     hermetic.
+//!   - Network tests that really install `code` and `euglena` from GitHub
+//!     Releases, gated behind `CDLVSM_NETWORK_TESTS=1` so CI/offline runs stay
+//!     fast and hermetic.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,6 +34,7 @@ fn run(prefix: &Path, args: &[&str]) -> Out {
         .args(args)
         .env("PREFIX", prefix)
         .env_remove("CDLVSM_CODE_VERSION")
+        .env_remove("CDLVSM_EUGLENA_VERSION")
         .output()
         .unwrap();
     Out {
@@ -76,12 +77,14 @@ fn typo_flag_is_unknown_command_not_a_package() {
 }
 
 #[test]
-fn install_euglena_fails_clean_no_panic() {
-    let p = tmp_prefix("euglena");
-    let o = run(&p, &["install", "euglena"]);
+fn install_euglena_bad_flag_fails_clean_offline() {
+    // Flag parsing happens before any network access, so this stays offline:
+    // a bad flag must be a clean exit-1 error, never a panic (101).
+    let p = tmp_prefix("euglena_badflag");
+    let o = run(&p, &["install", "euglena", "--bogus"]);
     assert_eq!(o.code, 1, "should exit 1, not panic (101)");
     assert!(
-        o.stderr.contains("not published yet"),
+        o.stderr.contains("unknown flag '--bogus'"),
         "stderr: {}",
         o.stderr
     );
@@ -271,4 +274,40 @@ fn real_install_dispatch_uninstall_roundtrip() {
     let o = run(&p, &["uninstall", "code"]);
     assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
     assert!(!p.join("bin/cdlvsm-code").exists());
+}
+
+#[test]
+fn real_install_euglena_roundtrip() {
+    if std::env::var("CDLVSM_NETWORK_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping network test (set CDLVSM_NETWORK_TESTS=1 to run)");
+        return;
+    }
+    let p = tmp_prefix("real_euglena");
+
+    let o = run(&p, &["install", "euglena"]);
+    assert_eq!(o.code, 0, "install failed: {}", o.stderr);
+
+    let o = run(&p, &["list"]);
+    assert!(o.stdout.contains("euglena"), "list: {}", o.stdout);
+    assert!(
+        p.join("bin/cdlvsm-euglena").exists(),
+        "cdlvsm-euglena shim should exist"
+    );
+    assert!(
+        !p.join("bin/euglena").exists(),
+        "bare euglena should not exist without --link"
+    );
+
+    // dispatch passthrough: cdlvsm euglena --version works
+    let o = run(&p, &["euglena", "--version"]);
+    assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
+    assert!(
+        o.stdout.contains("euglena"),
+        "dispatch stdout: {}",
+        o.stdout
+    );
+
+    let o = run(&p, &["uninstall", "euglena"]);
+    assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
+    assert!(!p.join("bin/cdlvsm-euglena").exists());
 }
