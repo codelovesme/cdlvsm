@@ -9,6 +9,7 @@
 //!     fast and hermetic.
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -120,6 +121,30 @@ fn dispatch_unknown_name_points_at_help() {
     let o = run(&p, &["wat"]);
     assert_eq!(o.code, 1);
     assert!(o.stderr.contains("cdlvsm help"), "stderr: {}", o.stderr);
+}
+
+/// Dispatch sets CDLVSM_INVOKED_AS="cdlvsm <pkg>" so the dispatched tool's own
+/// hints can say "cdlvsm <pkg> …" instead of a bare command name that doesn't
+/// exist (cdlvsm never installs a bare `<pkg>` without --link).
+#[test]
+fn dispatch_sets_invoked_as_env_var() {
+    let p = tmp_prefix("invoked_as");
+    let pkg_dir = p.join("share/cdlvsm/packages/code/v1.0.0");
+    fs::create_dir_all(&pkg_dir).unwrap();
+    let fake = pkg_dir.join("code");
+    fs::write(&fake, "#!/bin/sh\necho \"invoked_as=$CDLVSM_INVOKED_AS\"\n").unwrap();
+    let mut perms = fs::metadata(&fake).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&fake, perms).unwrap();
+    std::os::unix::fs::symlink("v1.0.0", p.join("share/cdlvsm/packages/code/current")).unwrap();
+
+    let o = run(&p, &["code"]);
+    assert_eq!(o.code, 0, "stderr: {}", o.stderr);
+    assert!(
+        o.stdout.contains("invoked_as=cdlvsm code"),
+        "stdout: {}",
+        o.stdout
+    );
 }
 
 #[test]

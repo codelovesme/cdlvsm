@@ -145,9 +145,17 @@ fn dispatch(name: &str, rest: &[String]) -> Result<i32> {
     // stdout/stderr, which is the transparent passthrough we want; do NOT
     // add any .stdout()/.stderr() redirection here.
     //
+    // CDLVSM_INVOKED_AS tells the dispatched tool how it was launched, so its
+    // own "next steps" hints can point back at `cdlvsm <pkg> …` rather than a
+    // bare command name that may not exist (cdlvsm installs a `cdlvsm-<pkg>`
+    // shim, not a bare `<pkg>`).
+    //
     // Nothing is printed before this point, so there's no buffered output to
     // flush — exec() does not run Rust destructors/atexit.
-    let err = Command::new(&target).args(rest).exec();
+    let err = Command::new(&target)
+        .env("CDLVSM_INVOKED_AS", format!("cdlvsm {name}"))
+        .args(rest)
+        .exec();
     // exec() only returns on failure.
     Err(error::CdlvsmError(format!(
         "failed to exec {}: {err}",
