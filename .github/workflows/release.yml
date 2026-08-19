@@ -23,9 +23,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Build release
-        run: cargo build --release
-
       - name: Determine version string
         id: version
         run: |
@@ -34,6 +31,23 @@ jobs:
           else
             echo "version=dev-${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
+
+      # Single source of truth for the shipped version is the git tag: stamp
+      # Cargo.toml's [package] version from it before building so the binary's
+      # `--version` always matches the release, rather than trusting a
+      # hand-edited Cargo.toml to have been bumped. Only the leading-`v`-
+      # stripped tag (v0.2.0 -> 0.2.0) is a valid semver for Cargo.
+      - name: Stamp version from tag
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          v="${{ github.ref_name }}"
+          v="${v#v}"
+          sed -i "0,/^version = \".*\"/s//version = \"$v\"/" Cargo.toml
+          grep -m1 '^version = ' Cargo.toml
+
+      - name: Build release
+        run: cargo build --release
 
       - name: Sanity check — binary runs standalone
         run: |
