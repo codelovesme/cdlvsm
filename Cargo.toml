@@ -1,0 +1,15 @@
+[package]
+name = "cdlvsm"
+version = "0.1.0"
+edition = "2021"
+description = "Package manager and dispatcher CLI for codelovesme's first-party tools (code, euglena)"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/codelovesme/cdlvsm-cli"
+readme = "README.md"
+
+[[bin]]
+name = "cdlvsm"
+path = "src/main.rs"
+
+[profile.release]
+strip = true

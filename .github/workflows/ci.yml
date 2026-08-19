@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-test:
+    name: Build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace
+
+      # Offline tests only. The network test (real install from GitHub
+      # Releases) is gated behind CDLVSM_NETWORK_TESTS=1 and skipped here to
+      # keep CI hermetic and fast; the uninstall-safety regression runs fully
+      # offline via a hand-built fake install tree, so the property that most
+      # matters is still covered on every push.
+      - name: Test
+        run: cargo test --workspace

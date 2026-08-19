@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # Manual dry-run: builds, sanity-checks, and uploads an Actions artifact but
+  # does NOT create a GitHub Release (guarded by `if: github.ref_type == 'tag'`
+  # below), so packaging can be exercised without cutting a real tag.
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build release tarball (Linux x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Determine version string
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=dev-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sanity check — binary runs standalone
+        run: |
+          set -euo pipefail
+          target/release/cdlvsm --version
+          target/release/cdlvsm --help >/dev/null
+
+      - name: Package tarball
+        run: |
+          set -euo pipefail
+          v="${{ steps.version.outputs.version }}"
+          stage="cdlvsm-${v}-x86_64-linux"
+          mkdir -p "$stage"
+          cp target/release/cdlvsm "$stage/cdlvsm"
+          cp LICENSE README.md "$stage/"
+          tar -czf "${stage}.tar.gz" "$stage"
+          echo "Built:"
+          ls -1 ./*.tar.gz
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdlvsm-release-${{ steps.version.outputs.version }}
+          path: "*.tar.gz"
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.tar.gz"
+          generate_release_notes: true
