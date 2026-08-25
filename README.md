@@ -51,7 +51,10 @@ the installed code binary with `euglena code set ~/.local/bin/cdlvsm-code`.
 ### `code` install flags
 
 - `--runtime` — install the smaller, LLVM-free interpreter-only tier instead
-  of the default SDK (which also has the native/wasm compiler).
+  of the default SDK (which also has the native/wasm compiler). Tiers only
+  exist for releases that ship separate per-tier builds (`code` did through
+  v0.4.1); from v0.5.0 on there is a single build, and cdlvsm installs it with
+  a note regardless of the tier flag.
 - `--link` — additionally create a bare `code` command in `$PREFIX/bin`. By
   default `cdlvsm install code` only creates a `cdlvsm-code` shim, **not** a
   bare `code`, because `code` collides with VS Code's own `code` CLI on

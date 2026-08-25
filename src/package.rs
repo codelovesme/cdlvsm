@@ -8,7 +8,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use crate::download::{download, extract, latest_tag, need};
+use crate::download::{download, extract, latest_tag, need, release_assets};
 use crate::error::{fail, Result};
 use crate::paths;
 
@@ -276,11 +276,24 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
         ));
     }
 
-    let asset = format!("{}-{}-x86_64-linux.tar.gz", spec.asset_base, spec.tag);
+    let (asset, tiered) = resolve_asset(spec)?;
     let url = format!(
         "https://github.com/{}/releases/download/{}/{asset}",
         spec.repo, spec.tag
     );
+
+    // When the tier-specific asset doesn't exist for this release, the single
+    // untiered build is what gets installed — say so, and don't label the
+    // result with a tier it doesn't have.
+    let label = if tiered { spec.label } else { None };
+    if !tiered {
+        if let Some(l) = spec.label {
+            eprintln!(
+                "note: {} {} has no separate '{l}' build; using the single {} release asset.",
+                spec.pkg, spec.tag, spec.pkg
+            );
+        }
+    }
 
     let tmp = mktemp()?;
     let _guard = TmpGuard(tmp.clone());
@@ -289,9 +302,9 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
     download(&url, &tarball)?;
     extract(&tarball, &tmp)?;
 
-    // The tarball stages under an `<asset_base>-*` directory containing the
-    // package binary (named `pkg`).
-    let stage = find_stage(&tmp, &format!("{}-", spec.asset_base))?;
+    // The tarball stages under a directory named after the asset (minus the
+    // `.tar.gz`) containing the package binary (named `pkg`).
+    let stage = find_stage(&tmp, asset.trim_end_matches(".tar.gz"), spec.pkg)?;
     let src_bin = stage.join(spec.pkg);
     if !src_bin.exists() {
         return fail(format!(
@@ -331,21 +344,22 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
         force_symlink(&target, &bin.join(spec.pkg))?;
     }
 
-    // Record how this package was installed so `upgrade` can reuse the exact
-    // settings (tier, link, repo, asset base, version-pin env var).
+    // Record how this package was *requested*, not how `resolve_asset` fell
+    // back this time, so `upgrade` keeps asking for the same tier — if a later
+    // release brings tiered builds back, it picks them up again.
     write_meta(&InstallMeta::from_spec(spec))?;
 
     eprintln!();
     match (spec.verb, spec.old) {
-        ("Upgraded", Some(old)) => match spec.label {
+        ("Upgraded", Some(old)) => match label {
             Some(label) => eprintln!("Upgraded {} ({label}) {old} -> {}", spec.pkg, spec.tag),
             None => eprintln!("Upgraded {} {old} -> {}", spec.pkg, spec.tag),
         },
-        ("Upgraded", None) => match spec.label {
+        ("Upgraded", None) => match label {
             Some(label) => eprintln!("Upgraded {} ({label}) -> {}", spec.pkg, spec.tag),
             None => eprintln!("Upgraded {} -> {}", spec.pkg, spec.tag),
         },
-        _ => match spec.label {
+        _ => match label {
             Some(label) => eprintln!(
                 "Installed {} ({label}) {} -> {}",
                 spec.pkg,
@@ -364,6 +378,47 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
     }
     path_hint(&bin);
     Ok(())
+}
+
+/// Pick the release asset to download.
+///
+/// Upstream asset naming isn't frozen: `code` shipped per-tier tarballs
+/// (`code-sdk-…`, `code-runtime-…`) through v0.4.1 and a single untiered
+/// `code-…` tarball from v0.5.0 on. So rather than trusting one constructed
+/// name, ask the release what it actually carries and take the first candidate
+/// it offers — tier-specific name first, then the plain `<pkg>` name.
+///
+/// Returns the asset file name and whether it was the tier-specific one.
+fn resolve_asset(spec: &ReleaseSpec) -> Result<(String, bool)> {
+    let preferred = format!("{}-{}-x86_64-linux.tar.gz", spec.asset_base, spec.tag);
+    let plain = format!("{}-{}-x86_64-linux.tar.gz", spec.pkg, spec.tag);
+
+    // No listing (offline, rate-limited, private repo): assume the
+    // conventional name and let `download` report the real failure.
+    let assets = match release_assets(spec.repo, spec.tag) {
+        Some(a) => a,
+        None => return Ok((preferred, true)),
+    };
+
+    if assets.contains(&preferred) {
+        return Ok((preferred, true));
+    }
+    if plain != preferred && assets.contains(&plain) {
+        return Ok((plain, false));
+    }
+
+    let also = if plain == preferred {
+        String::new()
+    } else {
+        format!(" or '{plain}'")
+    };
+    fail(format!(
+        "release {} of {} has no asset named '{preferred}'{also}.\n\
+         Available assets: {}",
+        spec.tag,
+        spec.repo,
+        assets.join(", ")
+    ))
 }
 
 pub fn uninstall(name: &str) -> Result<()> {
@@ -573,19 +628,27 @@ impl Drop for TmpGuard {
     }
 }
 
-fn find_stage(tmp: &Path, prefix: &str) -> Result<std::path::PathBuf> {
+/// Locate the extracted stage directory: the one named exactly after the asset
+/// (`stem`), else — tarball dir names haven't always tracked the asset name —
+/// any `<pkg>-*` directory.
+fn find_stage(tmp: &Path, stem: &str, pkg: &str) -> Result<std::path::PathBuf> {
+    let exact = tmp.join(stem);
+    if exact.is_dir() {
+        return Ok(exact);
+    }
+    let prefix = format!("{pkg}-");
     let entries = fs::read_dir(tmp)
         .map_err(|e| crate::error::CdlvsmError(format!("read {}: {e}", tmp.display())))?;
     for entry in entries.flatten() {
         if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with(prefix) {
+            if name.starts_with(&prefix) {
                 return Ok(entry.path());
             }
         }
     }
     fail(format!(
-        "unexpected archive layout — no {prefix}* directory found."
+        "unexpected archive layout — no {stem}/ or {prefix}* directory found."
     ))
 }
 
