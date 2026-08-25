@@ -6,6 +6,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 use crate::download::{
     download, extract, find_stage, latest_tag, make_executable, mktemp, need, platform,
@@ -249,7 +250,60 @@ fn install_euglena(opts: &InstallOpts) -> Result<()> {
         env_var: "CDLVSM_EUGLENA_VERSION",
         verb: "Installed",
         old: None,
-    })
+    })?;
+    ensure_code_for_euglena()
+}
+
+/// euglena hard-depends on the `code` interpreter to run apps. Install it too
+/// if it isn't already, then point euglena at cdlvsm's `code` shim — so
+/// `cdlvsm install euglena` alone is enough and no manual `euglena code set`
+/// step is needed.
+///
+/// (Despite what `euglena code show` says about falling back to `cdlvsm-code`
+/// on PATH when unconfigured, `euglena run` does not actually pick that up —
+/// an explicit `code set` is required. So this isn't just a nicety, it's
+/// necessary for a fresh `install euglena` to work at all.)
+fn ensure_code_for_euglena() -> Result<()> {
+    if !paths::package_dir("code").exists() {
+        eprintln!();
+        eprintln!("euglena needs the `code` interpreter to run apps — installing it too...");
+        install_code(&InstallOpts {
+            tier: Tier::Sdk,
+            link: false,
+        })?;
+    }
+    link_euglena_to_code()
+}
+
+/// Run `euglena code set <cdlvsm-code shim>`.
+///
+/// euglena-cli resolves and stores the *canonicalized* binary path at `code
+/// set` time rather than tracking the shim symlink live — so pointing it at
+/// the shim once is not enough to survive a later `cdlvsm upgrade code`.
+/// `upgrade` calls this again after every successful code upgrade (if
+/// euglena is installed) to keep it pointed at the current version.
+fn link_euglena_to_code() -> Result<()> {
+    let euglena_bin = paths::dispatch_target("euglena");
+    let code_shim = paths::bin_dir().join("cdlvsm-code");
+    let status = Command::new(&euglena_bin)
+        .args(["code", "set"])
+        .arg(&code_shim)
+        .status()
+        .map_err(|e| {
+            crate::error::CdlvsmError(format!(
+                "failed to run '{} code set': {e}",
+                euglena_bin.display()
+            ))
+        })?;
+    if !status.success() {
+        return fail(format!(
+            "'{} code set {}' failed",
+            euglena_bin.display(),
+            code_shim.display()
+        ));
+    }
+    eprintln!("Configured euglena to use {}", code_shim.display());
+    Ok(())
 }
 
 /// Resolve a release tag: a non-empty version pin from `env_var`, else the
@@ -522,7 +576,13 @@ pub fn upgrade(name: &str) -> Result<()> {
         env_var: &meta.env_var,
         verb: "Upgraded",
         old: current.as_deref(),
-    })
+    })?;
+
+    // Keep euglena's stored code path current — see `link_euglena_to_code`.
+    if name == "code" && paths::package_dir("euglena").exists() {
+        link_euglena_to_code()?;
+    }
+    Ok(())
 }
 
 /// Upgrade every installed package. Per-package errors are reported and

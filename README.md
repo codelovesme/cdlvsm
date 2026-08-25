@@ -45,9 +45,13 @@ cdlvsm <package> <args...>       run an installed package's binary
 | `code`    | the [Code](https://github.com/codelovesme/code) language toolchain |
 | `euglena` | the [euglena](https://github.com/codelovesme/euglena-cli) app CLI (scaffold/run/build Euglena apps) |
 
-`euglena` runs apps through the `code` interpreter, so you'll usually want
-both: `cdlvsm install euglena && cdlvsm install code`, then point euglena at
-the installed code binary with `euglena code set ~/.local/bin/cdlvsm-code`.
+`euglena` runs apps through the `code` interpreter, so `cdlvsm install
+euglena` also installs `code` (SDK tier, no `--link`) if it isn't already
+installed, and points euglena at cdlvsm's `code` shim — no separate `install
+code` or `euglena code set` step needed. That wiring keeps working across
+`cdlvsm upgrade code` too, since the shim always tracks whichever version is
+current. To use a different `code` build instead, run `euglena code set
+<path>` yourself afterwards.
 
 ### `code` install flags
 

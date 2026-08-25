@@ -483,7 +483,20 @@ fn real_install_euglena_roundtrip() {
     }
     let p = tmp_prefix("real_euglena");
 
-    let o = run(&p, &["install", "euglena"]);
+    // euglena's own `code set` writes to $HOME/.config/euglena-cli — point
+    // that at a throwaway dir so this test can't touch the real dev
+    // machine's euglena-cli config.
+    let home = p.join("home");
+    fs::create_dir_all(&home).unwrap();
+    let home_str = home.to_str().unwrap();
+    let xdg_config = home.join(".config");
+    let xdg_config_str = xdg_config.to_str().unwrap();
+
+    let o = run_env(
+        &p,
+        &["install", "euglena"],
+        &[("HOME", home_str), ("XDG_CONFIG_HOME", xdg_config_str)],
+    );
     assert_eq!(o.code, 0, "install failed: {}", o.stderr);
 
     let o = run(&p, &["list"]);
@@ -497,6 +510,17 @@ fn real_install_euglena_roundtrip() {
         "bare euglena should not exist without --link"
     );
 
+    // `code` should have been auto-installed as euglena's dependency.
+    assert!(
+        o.stdout.contains("code"),
+        "list should also show auto-installed code: {}",
+        o.stdout
+    );
+    assert!(
+        p.join("bin/cdlvsm-code").exists(),
+        "cdlvsm-code shim should exist (auto-installed for euglena)"
+    );
+
     // dispatch passthrough: cdlvsm euglena --version works
     let o = run(&p, &["euglena", "--version"]);
     assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
@@ -506,9 +530,30 @@ fn real_install_euglena_roundtrip() {
         o.stdout
     );
 
+    // euglena should already be wired to the auto-installed code shim.
+    // euglena-cli stores the *canonicalized* binary path, not the shim path
+    // itself, so compare against what the shim resolves to.
+    let out = Command::new(p.join("bin/cdlvsm-euglena"))
+        .args(["code", "show"])
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", &xdg_config)
+        .output()
+        .unwrap();
+    let show = String::from_utf8_lossy(&out.stdout);
+    let expected_target = fs::canonicalize(p.join("bin/cdlvsm-code")).unwrap();
+    assert!(
+        show.contains(expected_target.to_str().unwrap()),
+        "euglena should be configured to use cdlvsm's code shim target {}: {show}",
+        expected_target.display()
+    );
+
     let o = run(&p, &["uninstall", "euglena"]);
     assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
     assert!(!p.join("bin/cdlvsm-euglena").exists());
+
+    let o = run(&p, &["uninstall", "code"]);
+    assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
+    assert!(!p.join("bin/cdlvsm-code").exists());
 }
 
 #[test]
