@@ -33,6 +33,7 @@ pin a version with `CDLVSM_CLI_VERSION=v0.x.y`). Add `~/.local/bin` to your
 cdlvsm install <package> [--runtime] [--link]
 cdlvsm uninstall <package>
 cdlvsm upgrade [package]
+cdlvsm update
 cdlvsm list
 cdlvsm <package> <args...>       run an installed package's binary
 ```
@@ -65,9 +66,9 @@ the installed code binary with `euglena code set ~/.local/bin/cdlvsm-code`.
 - `PREFIX` — install root (default `$HOME/.local`). Packages live under
   `$PREFIX/share/cdlvsm/packages/<pkg>/<version>/`; shims under `$PREFIX/bin`.
 - `CDLVSM_CODE_VERSION` / `CDLVSM_EUGLENA_VERSION` — pin a package's version
-  instead of fetching the latest release (e.g. `v0.3.0`). Distinct from
-  `CDLVSM_CLI_VERSION`, which pins which `cdlvsm` build the installer script
-  fetches.
+  instead of fetching the latest release (e.g. `v0.3.0`).
+- `CDLVSM_CLI_VERSION` — pin which `cdlvsm` build to fetch, for both
+  `install.sh` and `cdlvsm update`.
 
 ### Updating
 
@@ -84,6 +85,11 @@ install stays a `--runtime` install with its bare `code` link. If a package
 is already at the latest (or pinned) version, it's reported as "already up
 to date" and skipped. `upgrade` takes no flags; to change tier or `--link`,
 re-run `cdlvsm install <package>` with the new flags.
+
+`cdlvsm update` is the same idea for `cdlvsm` itself — distinct from
+`upgrade`, which only touches installed packages. It downloads the latest
+(or `CDLVSM_CLI_VERSION`-pinned) release and replaces the running binary in
+place; no shell restart needed, the new version takes effect immediately.
 
 ### Uninstall safety
 

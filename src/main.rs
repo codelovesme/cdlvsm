@@ -11,14 +11,16 @@
 //! name with its own arbitrary trailing args — a shape a static subcommand
 //! enum doesn't fit.
 //!
-//! RESERVED NAMES: `install`, `uninstall`, `upgrade`, `list`, `help`, `-h`,
-//! `--help`, `-v`, `--version` are built-ins and can never be package names.
-//! A package named one of these would be permanently unreachable via dispatch.
+//! RESERVED NAMES: `install`, `uninstall`, `upgrade`, `update`, `list`,
+//! `help`, `-h`, `--help`, `-v`, `--version` are built-ins and can never be
+//! package names. A package named one of these would be permanently
+//! unreachable via dispatch.
 
 mod download;
 mod error;
 mod package;
 mod paths;
+mod update;
 
 use std::os::unix::process::CommandExt;
 use std::process::Command;
@@ -60,6 +62,7 @@ fn run(args: &[String]) -> Result<i32> {
         "install" => cmd_install(&args[2..]),
         "uninstall" => cmd_uninstall(&args[2..]),
         "upgrade" => cmd_upgrade(&args[2..]),
+        "update" => cmd_update(&args[2..]),
         "list" => package::list().map(|_| 0),
         // A flag-looking first arg is never a package name — a typo like
         // `cdlvsm -x` should be "unknown command", not "install a package
@@ -147,6 +150,17 @@ fn cmd_upgrade(rest: &[String]) -> Result<i32> {
     }
 }
 
+/// Update cdlvsm itself (distinct from `upgrade`, which updates installed
+/// packages) to the latest — or `CDLVSM_CLI_VERSION`-pinned — release.
+fn cmd_update(rest: &[String]) -> Result<i32> {
+    if !rest.is_empty() {
+        eprintln!("error: 'cdlvsm update' takes no arguments");
+        print_usage();
+        return Ok(1);
+    }
+    update::update().map(|_| 0)
+}
+
 /// Dispatch to an installed package's binary, replacing this process.
 fn dispatch(name: &str, rest: &[String]) -> Result<i32> {
     let target = paths::dispatch_target(name);
@@ -194,6 +208,7 @@ fn print_usage() {
     println!("  cdlvsm install <package> [--runtime] [--link]");
     println!("  cdlvsm uninstall <package>");
     println!("  cdlvsm upgrade [package]");
+    println!("  cdlvsm update");
     println!("  cdlvsm list");
     println!("  cdlvsm <package> <args...>       run an installed package's binary");
     println!();
@@ -210,8 +225,12 @@ fn print_usage() {
     println!("  `upgrade` takes no flags — it reuses the recorded install settings.");
     println!("  To change tier/--link, re-run `cdlvsm install <package>` with flags.");
     println!();
+    println!("  `update` updates cdlvsm itself (in place, no restart needed) — distinct");
+    println!("  from `upgrade`, which updates installed packages.");
+    println!();
     println!("Env:");
     println!("  PREFIX                   install root (default: $HOME/.local)");
     println!("  CDLVSM_CODE_VERSION      pin code's version instead of latest (e.g. v0.3.0)");
     println!("  CDLVSM_EUGLENA_VERSION   pin euglena's version instead of latest");
+    println!("  CDLVSM_CLI_VERSION       pin cdlvsm's own version for `update` (e.g. v0.3.0)");
 }

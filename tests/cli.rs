@@ -36,6 +36,7 @@ fn run(prefix: &Path, args: &[&str]) -> Out {
         .env("PREFIX", prefix)
         .env_remove("CDLVSM_CODE_VERSION")
         .env_remove("CDLVSM_EUGLENA_VERSION")
+        .env_remove("CDLVSM_CLI_VERSION")
         .output()
         .unwrap();
     Out {
@@ -52,7 +53,8 @@ fn run_env(prefix: &Path, args: &[&str], extra_env: &[(&str, &str)]) -> Out {
     cmd.args(args)
         .env("PREFIX", prefix)
         .env_remove("CDLVSM_CODE_VERSION")
-        .env_remove("CDLVSM_EUGLENA_VERSION");
+        .env_remove("CDLVSM_EUGLENA_VERSION")
+        .env_remove("CDLVSM_CLI_VERSION");
     for (k, v) in extra_env {
         cmd.env(k, v);
     }
@@ -393,6 +395,39 @@ fn upgrade_missing_metadata_falls_back_to_defaults() {
         o.stderr.contains("no install metadata for 'code'"),
         "stderr: {}",
         o.stderr
+    );
+}
+
+// --- offline: update (self) --------------------------------------------------
+//
+// Like `upgrade`, the "already up to date" path is testable offline: pinning
+// CDLVSM_CLI_VERSION to the version this test binary was built with
+// short-circuits the network `latest_tag` fetch and the download/replace
+// step, so it never touches the compiled test binary on disk.
+
+#[test]
+fn update_rejects_arguments() {
+    let p = tmp_prefix("update_args");
+    let o = run(&p, &["update", "code"]);
+    assert_eq!(o.code, 1, "should exit 1, not panic (101)");
+    assert!(
+        o.stderr.contains("'cdlvsm update' takes no arguments"),
+        "stderr: {}",
+        o.stderr
+    );
+}
+
+#[test]
+fn update_already_up_to_date_offline() {
+    let p = tmp_prefix("update_uptodate");
+    let current = concat!("v", env!("CARGO_PKG_VERSION"));
+    let o = run_env(&p, &["update"], &[("CDLVSM_CLI_VERSION", current)]);
+    assert_eq!(o.code, 0, "stderr: {}", o.stderr);
+    assert!(
+        o.stdout
+            .contains(&format!("cdlvsm is already up to date ({current})")),
+        "stdout: {}",
+        o.stdout
     );
 }
 

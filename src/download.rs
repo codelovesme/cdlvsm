@@ -5,7 +5,9 @@
 //! Kept behind these two functions so the implementation can be swapped (or
 //! faked in tests) without touching install logic.
 
-use std::path::Path;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{fail, Result};
@@ -128,4 +130,75 @@ pub fn release_assets(repo: &str, tag: &str) -> Option<Vec<String>> {
     } else {
         Some(names)
     }
+}
+
+// --- shared install-flow helpers --------------------------------------------
+//
+// Used by both `package.rs` (installing/upgrading packages) and `update.rs`
+// (updating cdlvsm itself) — the download → extract → locate-binary sequence
+// is identical for both.
+
+pub fn platform() -> (String, String) {
+    let os = run_capture("uname", &["-s"]).unwrap_or_default();
+    let arch = run_capture("uname", &["-m"]).unwrap_or_default();
+    (os, arch)
+}
+
+fn run_capture(cmd: &str, args: &[&str]) -> Option<String> {
+    let out = Command::new(cmd).args(args).output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+pub fn mktemp() -> Result<PathBuf> {
+    let s = run_capture("mktemp", &["-d"])
+        .ok_or_else(|| crate::error::CdlvsmError("mktemp failed".into()))?;
+    Ok(PathBuf::from(s))
+}
+
+pub struct TmpGuard(pub PathBuf);
+impl Drop for TmpGuard {
+    fn drop(&mut self) {
+        rm_rf(&self.0);
+    }
+}
+
+fn rm_rf(p: &Path) {
+    let _ = fs::remove_dir_all(p);
+    let _ = fs::remove_file(p);
+}
+
+/// Locate the extracted stage directory: the one named exactly after the asset
+/// (`stem`), else — tarball dir names haven't always tracked the asset name —
+/// any `<prefix>-*` directory.
+pub fn find_stage(tmp: &Path, stem: &str, prefix: &str) -> Result<PathBuf> {
+    let exact = tmp.join(stem);
+    if exact.is_dir() {
+        return Ok(exact);
+    }
+    let prefix = format!("{prefix}-");
+    let entries = fs::read_dir(tmp)
+        .map_err(|e| crate::error::CdlvsmError(format!("read {}: {e}", tmp.display())))?;
+    for entry in entries.flatten() {
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with(&prefix) {
+                return Ok(entry.path());
+            }
+        }
+    }
+    fail(format!(
+        "unexpected archive layout — no {stem}/ or {prefix}* directory found."
+    ))
+}
+
+pub fn make_executable(p: &Path) -> Result<()> {
+    let mut perms = fs::metadata(p)
+        .map_err(|e| crate::error::CdlvsmError(format!("stat {}: {e}", p.display())))?
+        .permissions();
+    perms.set_mode(perms.mode() | 0o755);
+    fs::set_permissions(p, perms)
+        .map_err(|e| crate::error::CdlvsmError(format!("chmod {}: {e}", p.display())))
 }

@@ -5,10 +5,12 @@
 //! package dispatches fine even if a future cdlvsm doesn't know its name.
 
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use crate::download::{download, extract, latest_tag, need, release_assets};
+use crate::download::{
+    download, extract, find_stage, latest_tag, make_executable, mktemp, need, platform,
+    release_assets, TmpGuard,
+};
 use crate::error::{fail, Result};
 use crate::paths;
 
@@ -599,67 +601,7 @@ pub fn list() -> Result<()> {
     Ok(())
 }
 
-// --- small platform helpers -------------------------------------------------
-
-fn platform() -> (String, String) {
-    let os = run_capture("uname", &["-s"]).unwrap_or_default();
-    let arch = run_capture("uname", &["-m"]).unwrap_or_default();
-    (os, arch)
-}
-
-fn run_capture(cmd: &str, args: &[&str]) -> Option<String> {
-    let out = std::process::Command::new(cmd).args(args).output().ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&out.stdout).trim().to_string())
-}
-
-fn mktemp() -> Result<std::path::PathBuf> {
-    let s = run_capture("mktemp", &["-d"])
-        .ok_or_else(|| crate::error::CdlvsmError("mktemp failed".into()))?;
-    Ok(std::path::PathBuf::from(s))
-}
-
-struct TmpGuard(std::path::PathBuf);
-impl Drop for TmpGuard {
-    fn drop(&mut self) {
-        rm_rf(&self.0);
-    }
-}
-
-/// Locate the extracted stage directory: the one named exactly after the asset
-/// (`stem`), else — tarball dir names haven't always tracked the asset name —
-/// any `<pkg>-*` directory.
-fn find_stage(tmp: &Path, stem: &str, pkg: &str) -> Result<std::path::PathBuf> {
-    let exact = tmp.join(stem);
-    if exact.is_dir() {
-        return Ok(exact);
-    }
-    let prefix = format!("{pkg}-");
-    let entries = fs::read_dir(tmp)
-        .map_err(|e| crate::error::CdlvsmError(format!("read {}: {e}", tmp.display())))?;
-    for entry in entries.flatten() {
-        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with(&prefix) {
-                return Ok(entry.path());
-            }
-        }
-    }
-    fail(format!(
-        "unexpected archive layout — no {stem}/ or {prefix}* directory found."
-    ))
-}
-
-fn make_executable(p: &Path) -> Result<()> {
-    let mut perms = fs::metadata(p)
-        .map_err(|e| crate::error::CdlvsmError(format!("stat {}: {e}", p.display())))?
-        .permissions();
-    perms.set_mode(perms.mode() | 0o755);
-    fs::set_permissions(p, perms)
-        .map_err(|e| crate::error::CdlvsmError(format!("chmod {}: {e}", p.display())))
-}
+// --- small filesystem helpers ------------------------------------------------
 
 fn symlink(target: &Path, link: &Path) -> Result<()> {
     if let Some(parent) = link.parent() {
