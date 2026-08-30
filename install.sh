@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Bootstrap installer for `cdlvsm` itself, from GitHub Releases.
 #
-#   curl -sSf https://raw.githubusercontent.com/codelovesme/cdlvsm-cli/main/install.sh | sh
+#   curl -sSf https://raw.githubusercontent.com/codelovesme/cdlvsm/main/install.sh | sh
 #
 # This installs the `cdlvsm` binary. Once installed, `cdlvsm` manages every
 # other codelovesme CLI tool (`cdlvsm install code`, etc.) — this script only
@@ -17,7 +17,7 @@
 #                       $PREFIX/bin
 set -eu
 
-REPO="codelovesme/cdlvsm-cli"
+REPO="codelovesme/cdlvsm"
 PREFIX="${PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"
 

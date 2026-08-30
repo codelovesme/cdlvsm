@@ -4,7 +4,7 @@ version = "0.4.0"
 edition = "2021"
 description = "Package manager and dispatcher CLI for codelovesme's first-party tools (code, euglena)"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/codelovesme/cdlvsm-cli"
+repository = "https://github.com/codelovesme/cdlvsm"
 readme = "README.md"
 
 [[bin]]

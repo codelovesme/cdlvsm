@@ -20,7 +20,7 @@ argv and inheriting stdin/stdout/stderr, exit code, and signals — so
 Linux x86_64 only, for now.
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/codelovesme/cdlvsm-cli/main/install.sh | sh
+curl -sSf https://raw.githubusercontent.com/codelovesme/cdlvsm/main/install.sh | sh
 ```
 
 Installs the `cdlvsm` binary to `~/.local/bin` (override with `PREFIX=...`;

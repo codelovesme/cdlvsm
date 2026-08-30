@@ -17,7 +17,7 @@ use crate::download::{
 };
 use crate::error::{fail, Result};
 
-const REPO: &str = "codelovesme/cdlvsm-cli";
+const REPO: &str = "codelovesme/cdlvsm";
 const ENV_VAR: &str = "CDLVSM_CLI_VERSION";
 
 pub fn update() -> Result<()> {
