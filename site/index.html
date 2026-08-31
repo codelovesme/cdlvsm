@@ -212,6 +212,12 @@
   .pkg-name { font-family: var(--mono); font-size: 1.15rem; font-weight: 700; }
   .pkg-desc { margin: 0; font-size: 0.92rem; color: var(--muted); }
   .pkg-note { margin: 0; font-size: 0.82rem; color: var(--muted-2); }
+  .plat-note {
+    font-size: 0.82rem; color: var(--muted); max-width: 62ch;
+    border: 1px solid var(--border); border-left: 2px solid var(--teal);
+    border-radius: 8px; padding: 0.7rem 0.9rem; margin: 0.9rem 0 0;
+  }
+  .plat-note b { color: var(--text); font-weight: 600; }
   .cmd-row {
     display: flex; align-items: center; gap: 0.6rem;
     margin-top: auto; padding: 0.6rem 0.75rem;
@@ -480,7 +486,7 @@
           <code id="install-cmd">curl -sSf https://raw.githubusercontent.com/codelovesme/cdlvsm/main/install.sh | sh</code>
           <button class="copy-btn" data-copy="curl -sSf https://raw.githubusercontent.com/codelovesme/cdlvsm/main/install.sh | sh">copy</button>
         </div>
-        <p class="pkg-note" style="margin:0">Linux x86_64, for now. Installs to <code>~/.local/bin</code> — override with <code>PREFIX=…</code>. Building from source? Just <code>cargo build --release</code>; there are no system dependencies.</p>
+        <p class="plat-note"><b>Platform:</b> <b>Linux&nbsp;x86_64</b>, for now. Installs to <code>~/.local/bin</code> — override with <code>PREFIX=…</code>. Building from source? Just <code>cargo build --release</code>; there are no system dependencies.</p>
       </div>
     </div>
   </section>
