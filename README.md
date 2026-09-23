@@ -44,6 +44,7 @@ cdlvsm <package> <args...>       run an installed package's binary
 |-----------|------------|
 | `code`    | the [Code](https://github.com/codelovesme/code) language toolchain |
 | `euglena` | the [euglena](https://github.com/codelovesme/euglena-cli) app CLI (scaffold/run/build Euglena apps) |
+| `ide`     | the [codelovesme IDE](https://github.com/codelovesme/ide), in the terminal — `cdlvsm ide [folder]` |
 
 `euglena` runs apps through the `code` interpreter, so `cdlvsm install
 euglena` also installs `code` (SDK tier, no `--link`) if it isn't already
@@ -52,6 +53,11 @@ code` or `euglena code set` step needed. That wiring keeps working across
 `cdlvsm upgrade code` too, since the shim always tracks whichever version is
 current. To use a different `code` build instead, run `euglena code set
 <path>` yourself afterwards.
+
+`ide` is a bundle rather than a lone binary — a launcher, the app's program
+and the modules it links, run by the `code` interpreter — so `cdlvsm install
+ide` also installs `code` if it isn't there. Every package's whole release
+directory is installed, not only its binary.
 
 ### `code` install flags
 

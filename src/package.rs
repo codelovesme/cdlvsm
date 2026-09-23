@@ -17,11 +17,13 @@ use crate::paths;
 
 const CODE_REPO: &str = "codelovesme/code";
 const EUGLENA_REPO: &str = "codelovesme/euglena-cli";
+const IDE_REPO: &str = "codelovesme/ide";
 
 #[derive(Clone, Copy)]
 pub enum Package {
     Code,
     Euglena,
+    Ide,
 }
 
 impl Package {
@@ -29,6 +31,7 @@ impl Package {
         match name {
             "code" => Some(Package::Code),
             "euglena" => Some(Package::Euglena),
+            "ide" => Some(Package::Ide),
             _ => None,
         }
     }
@@ -37,6 +40,7 @@ impl Package {
         match self {
             Package::Code => install_code(opts),
             Package::Euglena => install_euglena(opts),
+            Package::Ide => install_ide(opts),
         }
     }
 
@@ -58,6 +62,14 @@ impl Package {
                 repo: EUGLENA_REPO.into(),
                 asset_base: "euglena".into(),
                 env_var: "CDLVSM_EUGLENA_VERSION".into(),
+                label: None,
+                link: false,
+            },
+            Package::Ide => InstallMeta {
+                pkg: "ide".into(),
+                repo: IDE_REPO.into(),
+                asset_base: "ide".into(),
+                env_var: "CDLVSM_IDE_VERSION".into(),
                 label: None,
                 link: false,
             },
@@ -254,6 +266,33 @@ fn install_euglena(opts: &InstallOpts) -> Result<()> {
     ensure_code_for_euglena()
 }
 
+/// The codelovesme IDE. Its release is a bundle, not a lone binary: a
+/// launcher (`ide`), the app's `main.code` and genes, and the modules beside
+/// them — run by the `code` interpreter, which is installed too if missing.
+fn install_ide(opts: &InstallOpts) -> Result<()> {
+    let tag = resolve_tag("CDLVSM_IDE_VERSION", IDE_REPO)?;
+    install_release(&ReleaseSpec {
+        pkg: "ide",
+        repo: IDE_REPO,
+        asset_base: "ide",
+        tag: &tag,
+        label: None,
+        link: opts.link,
+        env_var: "CDLVSM_IDE_VERSION",
+        verb: "Installed",
+        old: None,
+    })?;
+    if !paths::package_dir("code").exists() {
+        eprintln!();
+        eprintln!("ide runs on the `code` interpreter — installing it too...");
+        install_code(&InstallOpts {
+            tier: Tier::Sdk,
+            link: false,
+        })?;
+    }
+    Ok(())
+}
+
 /// euglena hard-depends on the `code` interpreter to run apps. Install it too
 /// if it isn't already, then point euglena at cdlvsm's `code` shim — so
 /// `cdlvsm install euglena` alone is enough and no manual `euglena code set`
@@ -376,9 +415,11 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
     }
     fs::create_dir_all(&dest)
         .map_err(|e| crate::error::CdlvsmError(format!("mkdir {}: {e}", dest.display())))?;
+    // The whole stage, not just the binary: a package may be a bundle (the
+    // ide's launcher runs the program and modules shipped beside it), and
+    // for a lone binary the rest is only its README and LICENSE.
+    copy_dir(&stage, &dest)?;
     let dest_bin = dest.join(spec.pkg);
-    fs::copy(&src_bin, &dest_bin)
-        .map_err(|e| crate::error::CdlvsmError(format!("copy {} binary: {e}", spec.pkg)))?;
     // Don't trust the tarball to preserve the exec bit — exec() fails without it.
     make_executable(&dest_bin)?;
 
@@ -669,6 +710,24 @@ fn symlink(target: &Path, link: &Path) -> Result<()> {
     }
     std::os::unix::fs::symlink(target, link)
         .map_err(|e| crate::error::CdlvsmError(format!("symlink {}: {e}", link.display())))
+}
+
+fn copy_dir(from: &Path, to: &Path) -> Result<()> {
+    let err = |what: &str, p: &Path, e: std::io::Error| {
+        crate::error::CdlvsmError(format!("{what} {}: {e}", p.display()))
+    };
+    fs::create_dir_all(to).map_err(|e| err("mkdir", to, e))?;
+    for entry in fs::read_dir(from).map_err(|e| err("read", from, e))? {
+        let entry = entry.map_err(|e| err("read", from, e))?;
+        let src = entry.path();
+        let dst = to.join(entry.file_name());
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            copy_dir(&src, &dst)?;
+        } else {
+            fs::copy(&src, &dst).map_err(|e| err("copy", &src, e))?;
+        }
+    }
+    Ok(())
 }
 
 fn force_symlink(target: &Path, link: &Path) -> Result<()> {

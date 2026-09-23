@@ -216,6 +216,7 @@ fn print_usage() {
     println!("  code      the Code language toolchain (SDK tier by default;");
     println!("            --runtime for the smaller LLVM-free interpreter-only build)");
     println!("  euglena   the Euglena app CLI (scaffold/run/build Euglena apps)");
+    println!("  ide       the codelovesme IDE, in the terminal: `cdlvsm ide [folder]`");
     println!();
     println!("Flags:");
     println!("  --runtime   install code's Runtime tier instead of the default SDK tier");
@@ -232,5 +233,6 @@ fn print_usage() {
     println!("  PREFIX                   install root (default: $HOME/.local)");
     println!("  CDLVSM_CODE_VERSION      pin code's version instead of latest (e.g. v0.3.0)");
     println!("  CDLVSM_EUGLENA_VERSION   pin euglena's version instead of latest");
+    println!("  CDLVSM_IDE_VERSION       pin ide's version instead of latest");
     println!("  CDLVSM_CLI_VERSION       pin cdlvsm's own version for `update` (e.g. v0.3.0)");
 }

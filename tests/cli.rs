@@ -607,3 +607,42 @@ fn real_upgrade_roundtrip() {
     assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
     assert!(!p.join("share/cdlvsm/packages/code").exists());
 }
+
+#[test]
+fn ide_is_a_known_package() {
+    let p = tmp_prefix("ide_known");
+    let o = run(&p, &["ide"]);
+    assert_eq!(o.code, 1);
+    assert!(
+        o.stderr.contains("run `cdlvsm install ide` first"),
+        "stderr: {}",
+        o.stderr
+    );
+    let o = run(&p, &["help"]);
+    assert!(o.stdout.contains("ide       the codelovesme IDE"), "help: {}", o.stdout);
+}
+
+/// The ide's release is a bundle: the whole stage must land, not just the
+/// launcher, and `code` comes with it.
+#[test]
+fn real_install_ide_bundle() {
+    if std::env::var("CDLVSM_NETWORK_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping network test (set CDLVSM_NETWORK_TESTS=1 to run)");
+        return;
+    }
+    let p = tmp_prefix("real_ide");
+    let o = run(&p, &["install", "ide"]);
+    assert_eq!(o.code, 0, "install failed: {}", o.stderr);
+    let current = p.join("share/cdlvsm/packages/ide/current");
+    for f in ["ide", "main.code", "tty.so", "syntax.so", "src/ide.gene.code"] {
+        assert!(current.join(f).exists(), "bundle is missing {f}");
+    }
+    assert!(p.join("bin/cdlvsm-ide").exists());
+    assert!(p.join("bin/cdlvsm-code").exists(), "code comes with the ide");
+    let o = run(&p, &["ide", "--version"]);
+    assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
+    assert!(o.stdout.starts_with("ide v"), "stdout: {}", o.stdout);
+    let o = run(&p, &["uninstall", "ide"]);
+    assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
+    assert!(!p.join("bin/cdlvsm-ide").exists());
+}
