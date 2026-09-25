@@ -60,6 +60,7 @@ impl Package {
                 env_var: "CDLVSM_CODE_VERSION".into(),
                 label: Some("sdk".into()),
                 link: false,
+                desktop: true,
             },
             Package::Euglena => InstallMeta {
                 pkg: "euglena".into(),
@@ -68,6 +69,7 @@ impl Package {
                 env_var: "CDLVSM_EUGLENA_VERSION".into(),
                 label: None,
                 link: false,
+                desktop: true,
             },
             Package::Ide => InstallMeta {
                 pkg: "ide".into(),
@@ -76,6 +78,7 @@ impl Package {
                 env_var: "CDLVSM_IDE_VERSION".into(),
                 label: None,
                 link: false,
+                desktop: true,
             },
             Package::Console => InstallMeta {
                 pkg: "console".into(),
@@ -84,6 +87,7 @@ impl Package {
                 env_var: "CDLVSM_CONSOLE_VERSION".into(),
                 label: None,
                 link: false,
+                desktop: true,
             },
         }
     }
@@ -92,6 +96,8 @@ impl Package {
 pub struct InstallOpts {
     pub tier: Tier,
     pub link: bool,
+    /// An app gets an entry in the desktop's launcher (see desktop.rs).
+    pub desktop: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -121,6 +127,7 @@ struct InstallMeta {
     env_var: String,
     label: Option<String>,
     link: bool,
+    desktop: bool,
 }
 
 impl InstallMeta {
@@ -132,6 +139,7 @@ impl InstallMeta {
             env_var: spec.env_var.to_string(),
             label: spec.label.map(str::to_string),
             link: spec.link,
+            desktop: spec.desktop,
         }
     }
 }
@@ -171,6 +179,7 @@ fn read_meta(pkg: &str) -> Result<Option<InstallMeta>> {
                     env_var: String::new(),
                     label: None,
                     link: false,
+                    desktop: true,
                 });
             }
             "repo" => {
@@ -200,6 +209,11 @@ fn read_meta(pkg: &str) -> Result<Option<InstallMeta>> {
                     m.link = value == "1";
                 }
             }
+            "desktop" => {
+                if let Some(m) = meta.as_mut() {
+                    m.desktop = value != "0";
+                }
+            }
             _ => {} // unknown keys are ignored (forward compatibility)
         }
     }
@@ -224,6 +238,7 @@ fn write_meta(meta: &InstallMeta) -> Result<()> {
         None => body.push_str("label=\n"),
     }
     body.push_str(&format!("link={}\n", if meta.link { 1 } else { 0 }));
+    body.push_str(&format!("desktop={}\n", if meta.desktop { 1 } else { 0 }));
     fs::write(&path, body)
         .map_err(|e| crate::error::CdlvsmError(format!("write {}: {e}", path.display())))
 }
@@ -241,6 +256,7 @@ struct ReleaseSpec<'a> {
     tag: &'a str,
     label: Option<&'a str>,
     link: bool,
+    desktop: bool,
     env_var: &'a str,
     verb: &'a str,
     old: Option<&'a str>,
@@ -256,6 +272,7 @@ fn install_code(opts: &InstallOpts) -> Result<()> {
         tag: &tag,
         label: Some(tier),
         link: opts.link,
+        desktop: opts.desktop,
         env_var: "CDLVSM_CODE_VERSION",
         verb: "Installed",
         old: None,
@@ -271,6 +288,7 @@ fn install_euglena(opts: &InstallOpts) -> Result<()> {
         tag: &tag,
         label: None,
         link: opts.link,
+        desktop: opts.desktop,
         env_var: "CDLVSM_EUGLENA_VERSION",
         verb: "Installed",
         old: None,
@@ -290,6 +308,7 @@ fn install_ide(opts: &InstallOpts) -> Result<()> {
         tag: &tag,
         label: None,
         link: opts.link,
+        desktop: opts.desktop,
         env_var: "CDLVSM_IDE_VERSION",
         verb: "Installed",
         old: None,
@@ -300,6 +319,7 @@ fn install_ide(opts: &InstallOpts) -> Result<()> {
         install_code(&InstallOpts {
             tier: Tier::Sdk,
             link: false,
+            desktop: false,
         })?;
     }
     Ok(())
@@ -317,11 +337,11 @@ fn install_console(opts: &InstallOpts) -> Result<()> {
         tag: &tag,
         label: None,
         link: opts.link,
+        desktop: opts.desktop,
         env_var: "CDLVSM_CONSOLE_VERSION",
         verb: "Installed",
         old: None,
     })?;
-    eprintln!("Add it to the desktop's applications menu with: cdlvsm console --desktop");
     Ok(())
 }
 
@@ -341,6 +361,7 @@ fn ensure_code_for_euglena() -> Result<()> {
         install_code(&InstallOpts {
             tier: Tier::Sdk,
             link: false,
+            desktop: false,
         })?;
     }
     link_euglena_to_code()
@@ -478,6 +499,19 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
     // release brings tiered builds back, it picks them up again.
     write_meta(&InstallMeta::from_spec(spec))?;
 
+    // An app, in the desktop's launcher (GNOME's search, Spotlight…).
+    let launcher = if spec.desktop {
+        match crate::desktop::register(spec.pkg, &dest) {
+            Ok(place) => place,
+            Err(e) => {
+                eprintln!("note: {} could not be added to the applications menu: {}", spec.pkg, e.0);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     eprintln!();
     match (spec.verb, spec.old) {
         ("Upgraded", Some(old)) => match label {
@@ -504,6 +538,9 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
     );
     if spec.link {
         eprintln!("Linked: {}", bin.join(spec.pkg).display());
+    }
+    if let Some(place) = launcher {
+        eprintln!("In the applications menu: {}", place.display());
     }
     path_hint(&bin);
     Ok(())
@@ -584,6 +621,7 @@ pub fn uninstall(name: &str) -> Result<()> {
         }
     }
 
+    crate::desktop::unregister(name);
     rm_rf(&pkg_dir);
     println!("Uninstalled {name}.");
     Ok(())
@@ -635,6 +673,12 @@ pub fn upgrade(name: &str) -> Result<()> {
     if let Some(cur) = &current {
         if *cur == tag {
             println!("{name} is already up to date ({tag})");
+            // An app installed before cdlvsm made launcher entries gets one.
+            if meta.desktop {
+                if let Ok(Some(place)) = crate::desktop::register(name, &paths::package_dir(name).join(cur)) {
+                    println!("In the applications menu: {}", place.display());
+                }
+            }
             return Ok(());
         }
     }
@@ -646,6 +690,7 @@ pub fn upgrade(name: &str) -> Result<()> {
         tag: &tag,
         label: meta.label.as_deref(),
         link: meta.link,
+        desktop: meta.desktop,
         env_var: &meta.env_var,
         verb: "Upgraded",
         old: current.as_deref(),

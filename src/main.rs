@@ -16,6 +16,7 @@
 //! package names. A package named one of these would be permanently
 //! unreachable via dispatch.
 
+mod desktop;
 mod download;
 mod error;
 mod package;
@@ -98,11 +99,13 @@ fn cmd_install(rest: &[String]) -> Result<i32> {
 
     let mut tier = Tier::Sdk;
     let mut link = false;
+    let mut desktop = true;
     for arg in &rest[1..] {
         match arg.as_str() {
             "--runtime" => tier = Tier::Runtime,
             "--sdk" => tier = Tier::Sdk,
             "--link" => link = true,
+            "--no-desktop" => desktop = false,
             other => {
                 eprintln!("error: unknown flag '{other}' for 'cdlvsm install {name}'");
                 return Ok(1);
@@ -110,7 +113,7 @@ fn cmd_install(rest: &[String]) -> Result<i32> {
         }
     }
 
-    pkg.install(&InstallOpts { tier, link })?;
+    pkg.install(&InstallOpts { tier, link, desktop })?;
     Ok(0)
 }
 
@@ -205,7 +208,7 @@ fn print_usage() {
     println!("{VERSION}");
     println!();
     println!("Usage:");
-    println!("  cdlvsm install <package> [--runtime] [--link]");
+    println!("  cdlvsm install <package> [--runtime] [--link] [--no-desktop]");
     println!("  cdlvsm uninstall <package>");
     println!("  cdlvsm upgrade [package]");
     println!("  cdlvsm update");
@@ -223,6 +226,8 @@ fn print_usage() {
     println!("  --runtime   install code's Runtime tier instead of the default SDK tier");
     println!("  --link      also create a bare `<package>` command in $PREFIX/bin (opt-in;");
     println!("              for `code` this avoids colliding with VS Code's own `code` CLI)");
+    println!("  --no-desktop  an app (ide, console) is not added to the desktop's applications");
+    println!("              menu / search (it is by default; Linux and macOS)");
     println!();
     println!("  `upgrade` takes no flags — it reuses the recorded install settings.");
     println!("  To change tier/--link, re-run `cdlvsm install <package>` with flags.");

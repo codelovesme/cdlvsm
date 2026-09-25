@@ -59,6 +59,24 @@ and the modules it links, run by the `code` interpreter — so `cdlvsm install
 ide` also installs `code` if it isn't there. Every package's whole release
 directory is installed, not only its binary.
 
+### Apps in the desktop's menu
+
+A package that is an app — `ide`, `console` — goes in the desktop's own
+applications menu when it is installed, so it is found in GNOME's search,
+KDE's menu, Spotlight. On Linux (any desktop that follows XDG: GNOME, KDE,
+XFCE, Cinnamon…) that is a desktop entry,
+`~/.local/share/applications/codelovesme-<pkg>.desktop`; on macOS an app
+bundle in `~/Applications`. A terminal app like `ide` is marked as one, so
+the desktop opens a terminal to run it in. The entry starts the app through
+its `cdlvsm-<pkg>` shim, so it follows upgrades; `uninstall` takes it away
+(only an entry cdlvsm wrote). `--no-desktop` leaves it out, and is
+remembered.
+
+An app says what it is called in an `app.info` in its release (`name=`,
+`comment=`, `terminal=true`, `icon=`, `categories=`, `keywords=`); cdlvsm
+has defaults for its own. Windows (a Start Menu shortcut) follows when
+cdlvsm runs there.
+
 ### `code` install flags
 
 - `--runtime` — install the smaller, LLVM-free interpreter-only tier instead

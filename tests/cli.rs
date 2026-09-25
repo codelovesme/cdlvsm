@@ -34,6 +34,8 @@ fn run(prefix: &Path, args: &[&str]) -> Out {
     let out = Command::new(bin())
         .args(args)
         .env("PREFIX", prefix)
+        // Launcher entries go here, never in the real applications menu.
+        .env("XDG_DATA_HOME", prefix.join("xdg-data"))
         .env_remove("CDLVSM_CODE_VERSION")
         .env_remove("CDLVSM_EUGLENA_VERSION")
         .env_remove("CDLVSM_CLI_VERSION")
@@ -52,6 +54,7 @@ fn run_env(prefix: &Path, args: &[&str], extra_env: &[(&str, &str)]) -> Out {
     let mut cmd = Command::new(bin());
     cmd.args(args)
         .env("PREFIX", prefix)
+        .env("XDG_DATA_HOME", prefix.join("xdg-data"))
         .env_remove("CDLVSM_CODE_VERSION")
         .env_remove("CDLVSM_EUGLENA_VERSION")
         .env_remove("CDLVSM_CLI_VERSION");
@@ -648,15 +651,21 @@ fn real_install_ide_bundle() {
     let o = run(&p, &["install", "ide"]);
     assert_eq!(o.code, 0, "install failed: {}", o.stderr);
     let current = p.join("share/cdlvsm/packages/ide/current");
-    for f in ["ide", "main.code", "tty.so", "syntax.so", "src/ide.gene.code"] {
+    for f in ["ide", "ide-bin", "tty.so", "syntax.so", "pty.so"] {
         assert!(current.join(f).exists(), "bundle is missing {f}");
     }
     assert!(p.join("bin/cdlvsm-ide").exists());
     assert!(p.join("bin/cdlvsm-code").exists(), "code comes with the ide");
+    // An app: in the desktop's applications menu, started through its shim.
+    let entry = p.join("xdg-data/applications/codelovesme-ide.desktop");
+    let text = fs::read_to_string(&entry).expect("the ide's launcher entry");
+    assert!(text.contains("Terminal=true"), "{text}");
+    assert!(text.contains(&format!("Exec={}", p.join("bin/cdlvsm-ide").display())), "{text}");
     let o = run(&p, &["ide", "--version"]);
     assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
     assert!(o.stdout.starts_with("ide v"), "stdout: {}", o.stdout);
     let o = run(&p, &["uninstall", "ide"]);
     assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
     assert!(!p.join("bin/cdlvsm-ide").exists());
+    assert!(!entry.exists(), "uninstall takes the launcher entry away");
 }
