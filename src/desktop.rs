@@ -63,7 +63,7 @@ fn builtin(pkg: &str) -> Option<App> {
             "A terminal IDE for the code language",
             true,
             "accessories-text-editor",
-            "Development;IDE;TextEditor;Utility;",
+            "Development;IDE;",
             "editor;code;euglena;codelovesme;",
         )),
         "console" => Some(app(
