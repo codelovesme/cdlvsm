@@ -66,14 +66,19 @@ applications menu when it is installed, so it is found in GNOME's search,
 KDE's menu, Spotlight. On Linux (any desktop that follows XDG: GNOME, KDE,
 XFCE, Cinnamon…) that is a desktop entry,
 `~/.local/share/applications/codelovesme-<pkg>.desktop`; on macOS an app
-bundle in `~/Applications`. A terminal app like `ide` is marked as one, so
-the desktop opens a terminal to run it in. The entry starts the app through
+bundle in `~/Applications`. A terminal app like `ide` opens in the
+codelovesme console when that is installed (any installed app whose
+`app.info` says `runs-programs=-e` — `cdlvsm-console -e …`), and otherwise
+is marked as a terminal app, so the desktop opens its own terminal for it.
+Installing or removing such a terminal rewrites the terminal apps' entries
+to match. The entry starts the app through
 its `cdlvsm-<pkg>` shim, so it follows upgrades; `uninstall` takes it away
 (only an entry cdlvsm wrote). `--no-desktop` leaves it out, and is
 remembered.
 
 An app says what it is called in an `app.info` in its release (`name=`,
-`comment=`, `terminal=true`, `icon=`, `categories=`, `keywords=`); cdlvsm
+`comment=`, `terminal=true`, `icon=`, `categories=`, `keywords=`,
+`runs-programs=`); cdlvsm
 has defaults for its own. Windows (a Start Menu shortcut) follows when
 cdlvsm runs there.
 

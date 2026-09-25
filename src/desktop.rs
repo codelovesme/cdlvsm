@@ -21,12 +21,15 @@
 //! icon=icon.png          # a file in the release, or a theme icon's name
 //! categories=Development;IDE;
 //! keywords=editor;code;
+//! runs-programs=-e       # a terminal: `<it> -e program` runs a program
 //! ```
 //!
 //! — or, for the packages cdlvsm knows, from its own defaults below. A
 //! command-line tool (`code`, `euglena`) has neither and gets no entry.
 //! The entry starts the app through its `cdlvsm-<pkg>` shim, so an upgrade
-//! never leaves it pointing at a version that is gone.
+//! never leaves it pointing at a version that is gone. A terminal app opens
+//! in an installed terminal that says it runs programs (`runs-programs`,
+//! the console) — else the desktop opens its own terminal for it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -45,6 +48,9 @@ pub struct App {
     pub icon: String,
     pub categories: String,
     pub keywords: String,
+    /// It is a terminal, and this option makes it run a program
+    /// (`console -e program`); "" when it is not one.
+    pub runs_programs: String,
 }
 
 /// The apps cdlvsm knows, for releases without an `app.info`.
@@ -56,6 +62,7 @@ fn builtin(pkg: &str) -> Option<App> {
         icon: icon.into(),
         categories: categories.into(),
         keywords: keywords.into(),
+        runs_programs: String::new(),
     };
     match pkg {
         "ide" => Some(app(
@@ -88,6 +95,7 @@ pub fn parse_info(text: &str, base: Option<App>) -> Option<App> {
         icon: String::new(),
         categories: "Utility;".into(),
         keywords: String::new(),
+        runs_programs: String::new(),
     });
     for line in text.lines() {
         let line = line.split(" #").next().unwrap_or("").trim();
@@ -103,6 +111,7 @@ pub fn parse_info(text: &str, base: Option<App>) -> Option<App> {
             "icon" => app.icon = value,
             "categories" => app.categories = value,
             "keywords" => app.keywords = value,
+            "runs-programs" => app.runs_programs = value,
             _ => {}
         }
     }
@@ -145,23 +154,62 @@ fn exec_arg(s: &str) -> String {
     out.replace('%', "%%")
 }
 
-/// The XDG desktop entry for `app`, started by `exec`.
-pub fn desktop_entry(pkg: &str, app: &App, exec: &Path) -> String {
+/// The command line an entry runs for `app` (its `cdlvsm-<pkg>` shim), and
+/// whether the desktop must open a terminal for it: a terminal app goes in
+/// `runner` — an installed terminal's shim and its run-a-program option —
+/// when there is one.
+pub fn launch(pkg: &str, app: &App, runner: Option<(PathBuf, String)>) -> (String, bool) {
+    let shim = paths::bin_dir().join(format!("cdlvsm-{pkg}"));
+    match runner {
+        Some((terminal, option)) if app.terminal => {
+            // The program by its own name (the window is titled after it),
+            // through `current` so it follows upgrades.
+            let program = paths::current_link(pkg).join(pkg);
+            let line = format!(
+                "{} {} {}",
+                exec_arg(&terminal.display().to_string()),
+                exec_arg(&option),
+                exec_arg(&program.display().to_string())
+            );
+            (line, false)
+        }
+        _ => (exec_arg(&shim.display().to_string()), app.terminal),
+    }
+}
+
+/// An installed package that is a terminal able to run a program, other
+/// than `except`: its shim and the option.
+pub fn terminal_runner(except: &str) -> Option<(PathBuf, String)> {
+    let mut names: Vec<String> = fs::read_dir(paths::packages_root())
+        .ok()?
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names.into_iter().filter(|n| n != except).find_map(|name| {
+        let app = app_for(&name, &paths::current_link(&name))?;
+        (!app.runs_programs.is_empty())
+            .then(|| (paths::bin_dir().join(format!("cdlvsm-{name}")), app.runs_programs.clone()))
+    })
+}
+
+/// The XDG desktop entry for `app`, running `exec` (a command line, quoted).
+pub fn desktop_entry(pkg: &str, app: &App, exec: &str, terminal: bool) -> String {
     let mut out = String::from("[Desktop Entry]\nType=Application\n");
     out += &format!("Name={}\n", entry_value(&app.name));
     if !app.comment.is_empty() {
         out += &format!("Comment={}\n", entry_value(&app.comment));
     }
-    out += &format!("Exec={}\n", exec_arg(&exec.display().to_string()));
+    out += &format!("Exec={exec}\n");
     if !app.icon.is_empty() {
         out += &format!("Icon={}\n", entry_value(&app.icon));
     }
-    out += &format!("Terminal={}\n", app.terminal);
+    out += &format!("Terminal={terminal}\n");
     out += &format!("Categories={}\n", entry_value(&app.categories));
     if !app.keywords.is_empty() {
         out += &format!("Keywords={}\n", entry_value(&app.keywords));
     }
-    out += &format!("StartupNotify={}\n", !app.terminal);
+    out += &format!("StartupNotify={}\n", !terminal);
     // Whose it is, so uninstall removes only what cdlvsm wrote.
     out += &format!("X-cdlvsm-Package={pkg}\n");
     out
@@ -237,7 +285,8 @@ pub fn register(pkg: &str, dir: &Path) -> Result<Option<PathBuf>> {
     }
     if cfg!(unix) {
         let entry = applications_dir().join(format!("codelovesme-{pkg}.desktop"));
-        write(&entry, &desktop_entry(pkg, &app, &exec))?;
+        let (line, terminal) = launch(pkg, &app, terminal_runner(pkg));
+        write(&entry, &desktop_entry(pkg, &app, &line, terminal))?;
         // Menus that cache (update-desktop-database); nothing if it is not there.
         let _ = std::process::Command::new("update-desktop-database")
             .arg(applications_dir())
@@ -247,6 +296,30 @@ pub fn register(pkg: &str, dir: &Path) -> Result<Option<PathBuf>> {
         return Ok(Some(entry));
     }
     fail("apps in the desktop's launcher are made on Linux and macOS only")
+}
+
+/// A terminal that runs programs came or went: every installed terminal app
+/// written again, to open in it (or in the desktop's terminal).
+pub fn refresh_terminal_apps(changed: &str) {
+    let Ok(entries) = fs::read_dir(paths::packages_root()) else { return };
+    for name in entries.flatten().map(|e| e.file_name().to_string_lossy().into_owned()) {
+        if name == changed {
+            continue;
+        }
+        let dir = paths::current_link(&name);
+        let is_terminal_app = app_for(&name, &dir).map(|a| a.terminal).unwrap_or(false);
+        let listed = fs::read_to_string(applications_dir().join(format!("codelovesme-{name}.desktop")))
+            .map(|t| t.contains(&format!("X-cdlvsm-Package={name}")))
+            .unwrap_or(false);
+        if is_terminal_app && listed {
+            let _ = register(&name, &dir);
+        }
+    }
+}
+
+/// Whether `pkg` (installed at `dir`) is a terminal that runs programs.
+pub fn runs_programs(pkg: &str, dir: &Path) -> bool {
+    app_for(pkg, dir).map(|a| !a.runs_programs.is_empty()).unwrap_or(false)
 }
 
 /// `pkg`'s launcher entry taken away — only one cdlvsm wrote.
@@ -290,14 +363,30 @@ mod tests {
     }
 
     #[test]
+    fn a_terminal_app_opens_in_a_terminal_that_runs_programs() {
+        std::env::set_var("PREFIX", "/p");
+        let ide = builtin("ide").unwrap();
+        let (line, terminal) = launch("ide", &ide, Some((PathBuf::from("/p/bin/cdlvsm-console"), "-e".into())));
+        assert_eq!(line, "/p/bin/cdlvsm-console -e /p/share/cdlvsm/packages/ide/current/ide");
+        assert!(!terminal);
+        let (alone, in_terminal) = launch("ide", &ide, None);
+        assert_eq!(alone, "/p/bin/cdlvsm-ide");
+        assert!(in_terminal);
+        let (console, _) = launch("console", &builtin("console").unwrap(), Some((PathBuf::from("/x"), "-e".into())));
+        assert_eq!(console, "/p/bin/cdlvsm-console");
+        let info = parse_info("name=T\nruns-programs=-e\n", None).unwrap();
+        assert_eq!(info.runs_programs, "-e");
+    }
+
+    #[test]
     fn a_desktop_entry() {
-        let entry = desktop_entry("ide", &builtin("ide").unwrap(), Path::new("/home/a b/.local/bin/cdlvsm-ide"));
+        let entry = desktop_entry("ide", &builtin("ide").unwrap(), &exec_arg("/home/a b/.local/bin/cdlvsm-ide"), true);
         assert!(entry.starts_with("[Desktop Entry]\nType=Application\nName=codelovesme IDE\n"));
         assert!(entry.contains("\nExec=\"/home/a b/.local/bin/cdlvsm-ide\"\n"));
         assert!(entry.contains("\nTerminal=true\n"));
         assert!(entry.contains("\nIcon=accessories-text-editor\n"));
         assert!(entry.contains("\nX-cdlvsm-Package=ide\n"));
-        let plain = desktop_entry("console", &builtin("console").unwrap(), Path::new("/p/cdlvsm-console"));
+        let plain = desktop_entry("console", &builtin("console").unwrap(), "/p/cdlvsm-console", false);
         assert!(plain.contains("\nExec=/p/cdlvsm-console\n") && plain.contains("\nTerminal=false\n"));
     }
 

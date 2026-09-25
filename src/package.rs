@@ -511,6 +511,10 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
     } else {
         None
     };
+    // A terminal that runs programs: terminal apps now open in it.
+    if crate::desktop::runs_programs(spec.pkg, &dest) {
+        crate::desktop::refresh_terminal_apps(spec.pkg);
+    }
 
     eprintln!();
     match (spec.verb, spec.old) {
@@ -622,7 +626,12 @@ pub fn uninstall(name: &str) -> Result<()> {
     }
 
     crate::desktop::unregister(name);
+    let was_runner = crate::desktop::runs_programs(name, &paths::current_link(name));
     rm_rf(&pkg_dir);
+    // It opened terminal apps: they go back to the desktop's own terminal.
+    if was_runner {
+        crate::desktop::refresh_terminal_apps(name);
+    }
     println!("Uninstalled {name}.");
     Ok(())
 }
