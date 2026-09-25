@@ -18,12 +18,14 @@ use crate::paths;
 const CODE_REPO: &str = "codelovesme/code";
 const EUGLENA_REPO: &str = "codelovesme/euglena-cli";
 const IDE_REPO: &str = "codelovesme/ide";
+const CONSOLE_REPO: &str = "codelovesme/console";
 
 #[derive(Clone, Copy)]
 pub enum Package {
     Code,
     Euglena,
     Ide,
+    Console,
 }
 
 impl Package {
@@ -32,6 +34,7 @@ impl Package {
             "code" => Some(Package::Code),
             "euglena" => Some(Package::Euglena),
             "ide" => Some(Package::Ide),
+            "console" => Some(Package::Console),
             _ => None,
         }
     }
@@ -41,6 +44,7 @@ impl Package {
             Package::Code => install_code(opts),
             Package::Euglena => install_euglena(opts),
             Package::Ide => install_ide(opts),
+            Package::Console => install_console(opts),
         }
     }
 
@@ -70,6 +74,14 @@ impl Package {
                 repo: IDE_REPO.into(),
                 asset_base: "ide".into(),
                 env_var: "CDLVSM_IDE_VERSION".into(),
+                label: None,
+                link: false,
+            },
+            Package::Console => InstallMeta {
+                pkg: "console".into(),
+                repo: CONSOLE_REPO.into(),
+                asset_base: "console".into(),
+                env_var: "CDLVSM_CONSOLE_VERSION".into(),
                 label: None,
                 link: false,
             },
@@ -290,6 +302,26 @@ fn install_ide(opts: &InstallOpts) -> Result<()> {
             link: false,
         })?;
     }
+    Ok(())
+}
+
+/// The codelovesme console: a terminal in a window of its own. Its release
+/// is a bundle too — a launcher (`console`), the program, and the modules
+/// beside it — built as a program, so it needs no `code` interpreter.
+fn install_console(opts: &InstallOpts) -> Result<()> {
+    let tag = resolve_tag("CDLVSM_CONSOLE_VERSION", CONSOLE_REPO)?;
+    install_release(&ReleaseSpec {
+        pkg: "console",
+        repo: CONSOLE_REPO,
+        asset_base: "console",
+        tag: &tag,
+        label: None,
+        link: opts.link,
+        env_var: "CDLVSM_CONSOLE_VERSION",
+        verb: "Installed",
+        old: None,
+    })?;
+    eprintln!("Add it to the desktop's applications menu with: cdlvsm console --desktop");
     Ok(())
 }
 

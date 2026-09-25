@@ -622,6 +622,20 @@ fn ide_is_a_known_package() {
     assert!(o.stdout.contains("ide       the codelovesme IDE"), "help: {}", o.stdout);
 }
 
+#[test]
+fn console_is_a_known_package() {
+    let p = tmp_prefix("console_known");
+    let o = run(&p, &["console"]);
+    assert_eq!(o.code, 1);
+    assert!(
+        o.stderr.contains("run `cdlvsm install console` first"),
+        "stderr: {}",
+        o.stderr
+    );
+    let o = run(&p, &["help"]);
+    assert!(o.stdout.contains("console   the codelovesme console"), "help: {}", o.stdout);
+}
+
 /// The ide's release is a bundle: the whole stage must land, not just the
 /// launcher, and `code` comes with it.
 #[test]
