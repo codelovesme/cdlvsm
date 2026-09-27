@@ -113,7 +113,11 @@ fn cmd_install(rest: &[String]) -> Result<i32> {
         }
     }
 
-    pkg.install(&InstallOpts { tier, link, desktop })?;
+    pkg.install(&InstallOpts {
+        tier,
+        link,
+        desktop,
+    })?;
     Ok(0)
 }
 

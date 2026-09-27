@@ -55,15 +55,16 @@ pub struct App {
 
 /// The apps cdlvsm knows, for releases without an `app.info`.
 fn builtin(pkg: &str) -> Option<App> {
-    let app = |name: &str, comment: &str, terminal, icon: &str, categories: &str, keywords: &str| App {
-        name: name.into(),
-        comment: comment.into(),
-        terminal,
-        icon: icon.into(),
-        categories: categories.into(),
-        keywords: keywords.into(),
-        runs_programs: String::new(),
-    };
+    let app =
+        |name: &str, comment: &str, terminal, icon: &str, categories: &str, keywords: &str| App {
+            name: name.into(),
+            comment: comment.into(),
+            terminal,
+            icon: icon.into(),
+            categories: categories.into(),
+            keywords: keywords.into(),
+            runs_programs: String::new(),
+        };
     match pkg {
         "ide" => Some(app(
             "codelovesme IDE",
@@ -110,7 +111,9 @@ pub fn parse_info(text: &str, base: Option<App>) -> Option<App> {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let Some((key, value)) = line.split_once('=') else { continue };
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
         let value = value.trim().to_string();
         match key.trim() {
             "name" => app.name = value,
@@ -134,7 +137,10 @@ pub fn app_for(pkg: &str, dir: &Path) -> Option<App> {
     };
     // A file of the release, reached through `current` so it follows upgrades.
     if !app.icon.is_empty() && !app.icon.contains('/') && dir.join(&app.icon).is_file() {
-        app.icon = paths::current_link(pkg).join(&app.icon).display().to_string();
+        app.icon = paths::current_link(pkg)
+            .join(&app.icon)
+            .display()
+            .to_string();
     }
     Some(app)
 }
@@ -147,7 +153,9 @@ fn entry_value(s: &str) -> String {
 /// A command-line argument for a desktop entry's `Exec`, quoted as the
 /// spec asks when it needs to be.
 fn exec_arg(s: &str) -> String {
-    let plain = s.chars().all(|c| c.is_ascii_alphanumeric() || "/._-+".contains(c));
+    let plain = s
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "/._-+".contains(c));
     if plain {
         return s.to_string();
     }
@@ -196,8 +204,12 @@ pub fn terminal_runner(except: &str) -> Option<(PathBuf, String)> {
     names.sort();
     names.into_iter().filter(|n| n != except).find_map(|name| {
         let app = app_for(&name, &paths::current_link(&name))?;
-        (!app.runs_programs.is_empty())
-            .then(|| (paths::bin_dir().join(format!("cdlvsm-{name}")), app.runs_programs.clone()))
+        (!app.runs_programs.is_empty()).then(|| {
+            (
+                paths::bin_dir().join(format!("cdlvsm-{name}")),
+                app.runs_programs.clone(),
+            )
+        })
     })
 }
 
@@ -233,7 +245,9 @@ fn sh_quoted(s: &str) -> String {
 pub fn mac_launcher(app: &App, exec: &Path) -> String {
     let exec = exec.display().to_string();
     if app.terminal {
-        let command = format!("exec {}", sh_quoted(&exec)).replace('\\', "\\\\").replace('"', "\\\"");
+        let command = format!("exec {}", sh_quoted(&exec))
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
         format!(
             "#!/bin/sh\nosascript -e 'tell application \"Terminal\" to do script \"{}\"' -e 'tell application \"Terminal\" to activate'\n",
             command.replace('\'', "'\\''")
@@ -244,7 +258,9 @@ pub fn mac_launcher(app: &App, exec: &Path) -> String {
 }
 
 fn xml(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// The macOS bundle's Info.plist.
@@ -260,15 +276,20 @@ fn applications_dir() -> PathBuf {
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
             home.join(".local/share")
         });
     data.join("applications")
 }
 
 fn mac_app_dir(app: &App) -> PathBuf {
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
-    home.join("Applications").join(format!("{}.app", app.name.replace('/', "-")))
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
+    home.join("Applications")
+        .join(format!("{}.app", app.name.replace('/', "-")))
 }
 
 fn write(path: &Path, text: &str) -> Result<()> {
@@ -276,12 +297,15 @@ fn write(path: &Path, text: &str) -> Result<()> {
         fs::create_dir_all(parent)
             .map_err(|e| crate::error::CdlvsmError(format!("mkdir {}: {e}", parent.display())))?;
     }
-    fs::write(path, text).map_err(|e| crate::error::CdlvsmError(format!("write {}: {e}", path.display())))
+    fs::write(path, text)
+        .map_err(|e| crate::error::CdlvsmError(format!("write {}: {e}", path.display())))
 }
 
 /// `pkg` put in the desktop's launcher, if it is an app. Answers where.
 pub fn register(pkg: &str, dir: &Path) -> Result<Option<PathBuf>> {
-    let Some(app) = app_for(pkg, dir) else { return Ok(None) };
+    let Some(app) = app_for(pkg, dir) else {
+        return Ok(None);
+    };
     let exec = paths::bin_dir().join(format!("cdlvsm-{pkg}"));
     if cfg!(target_os = "macos") {
         let bundle = mac_app_dir(&app);
@@ -309,16 +333,22 @@ pub fn register(pkg: &str, dir: &Path) -> Result<Option<PathBuf>> {
 /// A terminal that runs programs came or went: every installed terminal app
 /// written again, to open in it (or in the desktop's terminal).
 pub fn refresh_terminal_apps(changed: &str) {
-    let Ok(entries) = fs::read_dir(paths::packages_root()) else { return };
-    for name in entries.flatten().map(|e| e.file_name().to_string_lossy().into_owned()) {
+    let Ok(entries) = fs::read_dir(paths::packages_root()) else {
+        return;
+    };
+    for name in entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+    {
         if name == changed {
             continue;
         }
         let dir = paths::current_link(&name);
         let is_terminal_app = app_for(&name, &dir).map(|a| a.terminal).unwrap_or(false);
-        let listed = fs::read_to_string(applications_dir().join(format!("codelovesme-{name}.desktop")))
-            .map(|t| t.contains(&format!("X-cdlvsm-Package={name}")))
-            .unwrap_or(false);
+        let listed =
+            fs::read_to_string(applications_dir().join(format!("codelovesme-{name}.desktop")))
+                .map(|t| t.contains(&format!("X-cdlvsm-Package={name}")))
+                .unwrap_or(false);
         if is_terminal_app && listed {
             let _ = register(&name, &dir);
         }
@@ -327,22 +357,32 @@ pub fn refresh_terminal_apps(changed: &str) {
 
 /// Whether `pkg` (installed at `dir`) is a terminal that runs programs.
 pub fn runs_programs(pkg: &str, dir: &Path) -> bool {
-    app_for(pkg, dir).map(|a| !a.runs_programs.is_empty()).unwrap_or(false)
+    app_for(pkg, dir)
+        .map(|a| !a.runs_programs.is_empty())
+        .unwrap_or(false)
 }
 
 /// `pkg`'s launcher entry taken away — only one cdlvsm wrote.
 pub fn unregister(pkg: &str) {
     let marker = format!("X-cdlvsm-Package={pkg}");
     let entry = applications_dir().join(format!("codelovesme-{pkg}.desktop"));
-    if fs::read_to_string(&entry).map(|t| t.contains(&marker)).unwrap_or(false) {
+    if fs::read_to_string(&entry)
+        .map(|t| t.contains(&marker))
+        .unwrap_or(false)
+    {
         let _ = fs::remove_file(&entry);
     }
-    let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default();
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default();
     let mac_marker = format!("<key>X-cdlvsm-Package</key><string>{pkg}</string>");
     if let Ok(apps) = fs::read_dir(home.join("Applications")) {
         for bundle in apps.flatten() {
             let plist = bundle.path().join("Contents/Info.plist");
-            if fs::read_to_string(&plist).map(|t| t.contains(&mac_marker)).unwrap_or(false) {
+            if fs::read_to_string(&plist)
+                .map(|t| t.contains(&mac_marker))
+                .unwrap_or(false)
+            {
                 let _ = fs::remove_dir_all(bundle.path());
             }
         }
@@ -362,7 +402,11 @@ mod tests {
 
     #[test]
     fn app_info_overrides_the_defaults() {
-        let app = parse_info("# mine\nname=Mine\nterminal=true  # in a terminal\nicon=icon.png\nwhat=ever\n", builtin("console")).unwrap();
+        let app = parse_info(
+            "# mine\nname=Mine\nterminal=true  # in a terminal\nicon=icon.png\nwhat=ever\n",
+            builtin("console"),
+        )
+        .unwrap();
         assert_eq!(app.name, "Mine");
         assert!(app.terminal);
         assert_eq!(app.icon, "icon.png");
@@ -374,13 +418,24 @@ mod tests {
     fn a_terminal_app_opens_in_a_terminal_that_runs_programs() {
         std::env::set_var("PREFIX", "/p");
         let ide = builtin("ide").unwrap();
-        let (line, terminal) = launch("ide", &ide, Some((PathBuf::from("/p/bin/cdlvsm-console"), "-e".into())));
-        assert_eq!(line, "/p/bin/cdlvsm-console -e /p/share/cdlvsm/packages/ide/current/ide");
+        let (line, terminal) = launch(
+            "ide",
+            &ide,
+            Some((PathBuf::from("/p/bin/cdlvsm-console"), "-e".into())),
+        );
+        assert_eq!(
+            line,
+            "/p/bin/cdlvsm-console -e /p/share/cdlvsm/packages/ide/current/ide"
+        );
         assert!(!terminal);
         let (alone, in_terminal) = launch("ide", &ide, None);
         assert_eq!(alone, "/p/bin/cdlvsm-ide");
         assert!(in_terminal);
-        let (console, _) = launch("console", &builtin("console").unwrap(), Some((PathBuf::from("/x"), "-e".into())));
+        let (console, _) = launch(
+            "console",
+            &builtin("console").unwrap(),
+            Some((PathBuf::from("/x"), "-e".into())),
+        );
         assert_eq!(console, "/p/bin/cdlvsm-console");
         let info = parse_info("name=T\nruns-programs=-e\n", None).unwrap();
         assert_eq!(info.runs_programs, "-e");
@@ -388,23 +443,47 @@ mod tests {
 
     #[test]
     fn a_desktop_entry() {
-        let entry = desktop_entry("ide", &builtin("ide").unwrap(), &exec_arg("/home/a b/.local/bin/cdlvsm-ide"), true);
+        let entry = desktop_entry(
+            "ide",
+            &builtin("ide").unwrap(),
+            &exec_arg("/home/a b/.local/bin/cdlvsm-ide"),
+            true,
+        );
         assert!(entry.starts_with("[Desktop Entry]\nType=Application\nName=codelovesme IDE\n"));
         assert!(entry.contains("\nExec=\"/home/a b/.local/bin/cdlvsm-ide\"\n"));
         assert!(entry.contains("\nTerminal=true\n"));
         assert!(entry.contains("\nIcon=accessories-text-editor\n"));
         assert!(entry.contains("\nX-cdlvsm-Package=ide\n"));
-        let plain = desktop_entry("console", &builtin("console").unwrap(), "/p/cdlvsm-console", false);
-        assert!(plain.contains("\nExec=/p/cdlvsm-console\n") && plain.contains("\nTerminal=false\n"));
+        let plain = desktop_entry(
+            "console",
+            &builtin("console").unwrap(),
+            "/p/cdlvsm-console",
+            false,
+        );
+        assert!(
+            plain.contains("\nExec=/p/cdlvsm-console\n") && plain.contains("\nTerminal=false\n")
+        );
     }
 
     #[test]
     fn a_mac_bundle() {
-        let term = mac_launcher(&builtin("ide").unwrap(), Path::new("/Users/me/.local/bin/cdlvsm-ide"));
-        assert!(term.contains("tell application \"Terminal\" to do script"), "{term}");
+        let term = mac_launcher(
+            &builtin("ide").unwrap(),
+            Path::new("/Users/me/.local/bin/cdlvsm-ide"),
+        );
+        assert!(
+            term.contains("tell application \"Terminal\" to do script"),
+            "{term}"
+        );
         assert!(term.contains("/Users/me/.local/bin/cdlvsm-ide"));
-        let window = mac_launcher(&builtin("console").unwrap(), Path::new("/Users/me/.local/bin/cdlvsm-console"));
-        assert_eq!(window, "#!/bin/sh\nexec '/Users/me/.local/bin/cdlvsm-console' \"$@\"\n");
+        let window = mac_launcher(
+            &builtin("console").unwrap(),
+            Path::new("/Users/me/.local/bin/cdlvsm-console"),
+        );
+        assert_eq!(
+            window,
+            "#!/bin/sh\nexec '/Users/me/.local/bin/cdlvsm-console' \"$@\"\n"
+        );
         let plist = mac_plist("console", &builtin("console").unwrap());
         assert!(plist.contains("<key>CFBundleExecutable</key><string>console</string>"));
         assert!(plist.contains("<string>codelovesme console</string>"));

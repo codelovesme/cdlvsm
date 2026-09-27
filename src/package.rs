@@ -545,7 +545,10 @@ fn install_release(spec: &ReleaseSpec) -> Result<()> {
         match crate::desktop::register(spec.pkg, &dest) {
             Ok(place) => place,
             Err(e) => {
-                eprintln!("note: {} could not be added to the applications menu: {}", spec.pkg, e.0);
+                eprintln!(
+                    "note: {} could not be added to the applications menu: {}",
+                    spec.pkg, e.0
+                );
                 None
             }
         }
@@ -725,7 +728,9 @@ pub fn upgrade(name: &str) -> Result<()> {
             println!("{name} is already up to date ({tag})");
             // An app installed before cdlvsm made launcher entries gets one.
             if meta.desktop {
-                if let Ok(Some(place)) = crate::desktop::register(name, &paths::package_dir(name).join(cur)) {
+                if let Ok(Some(place)) =
+                    crate::desktop::register(name, &paths::package_dir(name).join(cur))
+                {
                     println!("In the applications menu: {}", place.display());
                 }
             }

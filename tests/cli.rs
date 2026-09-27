@@ -622,7 +622,11 @@ fn ide_is_a_known_package() {
         o.stderr
     );
     let o = run(&p, &["help"]);
-    assert!(o.stdout.contains("ide       the codelovesme IDE"), "help: {}", o.stdout);
+    assert!(
+        o.stdout.contains("ide       the codelovesme IDE"),
+        "help: {}",
+        o.stdout
+    );
 }
 
 #[test]
@@ -636,7 +640,11 @@ fn console_is_a_known_package() {
         o.stderr
     );
     let o = run(&p, &["help"]);
-    assert!(o.stdout.contains("console   the codelovesme console"), "help: {}", o.stdout);
+    assert!(
+        o.stdout.contains("console   the codelovesme console"),
+        "help: {}",
+        o.stdout
+    );
 }
 
 #[test]
@@ -650,7 +658,12 @@ fn mike_desktop_is_a_known_package() {
         o.stderr
     );
     let o = run(&p, &["help"]);
-    assert!(o.stdout.contains("mike-desktop  Mike's Linux desktop companion"), "help: {}", o.stdout);
+    assert!(
+        o.stdout
+            .contains("mike-desktop  Mike's Linux desktop companion"),
+        "help: {}",
+        o.stdout
+    );
 }
 
 #[test]
@@ -663,7 +676,13 @@ fn real_install_mike_desktop_bundle() {
     let o = run(&p, &["install", "mike-desktop"]);
     assert_eq!(o.code, 0, "install failed: {}", o.stderr);
     let current = p.join("share/cdlvsm/packages/mike-desktop/current");
-    for file in ["mike-desktop", "main.code", "net_client.so", "window.so", "src/desktop.gene.code"] {
+    for file in [
+        "mike-desktop",
+        "main.code",
+        "net_client.so",
+        "window.so",
+        "src/desktop.gene.code",
+    ] {
         assert!(current.join(file).exists(), "bundle is missing {file}");
     }
     let entry = p.join("xdg-data/applications/codelovesme-mike-desktop.desktop");
@@ -672,7 +691,11 @@ fn real_install_mike_desktop_bundle() {
     assert!(text.contains("Terminal=false"), "{text}");
     let o = run(&p, &["mike-desktop", "--version"]);
     assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
-    assert!(o.stdout.starts_with("mike-desktop v"), "stdout: {}", o.stdout);
+    assert!(
+        o.stdout.starts_with("mike-desktop v"),
+        "stdout: {}",
+        o.stdout
+    );
     let o = run(&p, &["upgrade", "mike-desktop"]);
     assert_eq!(o.code, 0, "upgrade failed: {}", o.stderr);
     let o = run(&p, &["uninstall", "mike-desktop"]);
@@ -696,12 +719,18 @@ fn real_install_ide_bundle() {
         assert!(current.join(f).exists(), "bundle is missing {f}");
     }
     assert!(p.join("bin/cdlvsm-ide").exists());
-    assert!(p.join("bin/cdlvsm-code").exists(), "code comes with the ide");
+    assert!(
+        p.join("bin/cdlvsm-code").exists(),
+        "code comes with the ide"
+    );
     // An app: in the desktop's applications menu, started through its shim.
     let entry = p.join("xdg-data/applications/codelovesme-ide.desktop");
     let text = fs::read_to_string(&entry).expect("the ide's launcher entry");
     assert!(text.contains("Terminal=true"), "{text}");
-    assert!(text.contains(&format!("Exec={}", p.join("bin/cdlvsm-ide").display())), "{text}");
+    assert!(
+        text.contains(&format!("Exec={}", p.join("bin/cdlvsm-ide").display())),
+        "{text}"
+    );
     let o = run(&p, &["ide", "--version"]);
     assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
     assert!(o.stdout.starts_with("ide v"), "stdout: {}", o.stdout);
