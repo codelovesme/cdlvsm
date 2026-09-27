@@ -673,8 +673,23 @@ fn real_install_mike_desktop_bundle() {
         return;
     }
     let p = tmp_prefix("real_mike_desktop");
+    let old_code = run_env(
+        &p,
+        &["install", "code"],
+        &[("CDLVSM_CODE_VERSION", "v2.10.0")],
+    );
+    assert_eq!(
+        old_code.code, 0,
+        "old Code install failed: {}",
+        old_code.stderr
+    );
     let o = run(&p, &["install", "mike-desktop"]);
     assert_eq!(o.code, 0, "install failed: {}", o.stderr);
+    assert_ne!(
+        fs::read_link(p.join("share/cdlvsm/packages/code/current")).unwrap(),
+        PathBuf::from("v2.10.0"),
+        "Mike Desktop should upgrade an older Code runtime"
+    );
     let current = p.join("share/cdlvsm/packages/mike-desktop/current");
     for file in [
         "mike-desktop",

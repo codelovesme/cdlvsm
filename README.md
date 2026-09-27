@@ -60,6 +60,9 @@ and the modules it links, run by the `code` interpreter — so `cdlvsm install
 ide` also installs `code` if it isn't there. Every package's whole release
 directory is installed, not only its binary.
 
+`mike-desktop` is also a bundle. Its install brings in Code 2.11 or newer,
+upgrading an older managed Code install before adding the app.
+
 ### Apps in the desktop's menu
 
 A package that is an app — `ide`, `console` — goes in the desktop's own
