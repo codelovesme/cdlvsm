@@ -45,6 +45,7 @@ cdlvsm <package> <args...>       run an installed package's binary
 | `code`    | the [Code](https://github.com/codelovesme/code) language toolchain |
 | `euglena` | the [euglena](https://github.com/codelovesme/euglena-cli) app CLI (scaffold/run/build Euglena apps) |
 | `ide`     | the [codelovesme IDE](https://github.com/codelovesme/ide), in the terminal — `cdlvsm ide [folder]` |
+| `mike-desktop` | [Mike Desktop](https://github.com/codelovesme/mike-desktop), Mike's native Linux interface — `cdlvsm mike-desktop` |
 
 `euglena` runs apps through the `code` interpreter, so `cdlvsm install
 euglena` also installs `code` (SDK tier, no `--link`) if it isn't already

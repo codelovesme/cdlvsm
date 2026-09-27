@@ -639,6 +639,47 @@ fn console_is_a_known_package() {
     assert!(o.stdout.contains("console   the codelovesme console"), "help: {}", o.stdout);
 }
 
+#[test]
+fn mike_desktop_is_a_known_package() {
+    let p = tmp_prefix("mike_desktop_known");
+    let o = run(&p, &["mike-desktop"]);
+    assert_eq!(o.code, 1);
+    assert!(
+        o.stderr.contains("run `cdlvsm install mike-desktop` first"),
+        "stderr: {}",
+        o.stderr
+    );
+    let o = run(&p, &["help"]);
+    assert!(o.stdout.contains("mike-desktop  Mike's Linux desktop companion"), "help: {}", o.stdout);
+}
+
+#[test]
+fn real_install_mike_desktop_bundle() {
+    if std::env::var("CDLVSM_NETWORK_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping network test (set CDLVSM_NETWORK_TESTS=1 to run)");
+        return;
+    }
+    let p = tmp_prefix("real_mike_desktop");
+    let o = run(&p, &["install", "mike-desktop"]);
+    assert_eq!(o.code, 0, "install failed: {}", o.stderr);
+    let current = p.join("share/cdlvsm/packages/mike-desktop/current");
+    for file in ["mike-desktop", "main.code", "net_client.so", "window.so", "src/desktop.gene.code"] {
+        assert!(current.join(file).exists(), "bundle is missing {file}");
+    }
+    let entry = p.join("xdg-data/applications/codelovesme-mike-desktop.desktop");
+    let text = fs::read_to_string(&entry).expect("desktop launcher entry");
+    assert!(text.contains("Name=Mike Desktop"), "{text}");
+    assert!(text.contains("Terminal=false"), "{text}");
+    let o = run(&p, &["mike-desktop", "--version"]);
+    assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
+    assert!(o.stdout.starts_with("mike-desktop v"), "stdout: {}", o.stdout);
+    let o = run(&p, &["upgrade", "mike-desktop"]);
+    assert_eq!(o.code, 0, "upgrade failed: {}", o.stderr);
+    let o = run(&p, &["uninstall", "mike-desktop"]);
+    assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
+    assert!(!entry.exists(), "uninstall takes the launcher entry away");
+}
+
 /// The ide's release is a bundle: the whole stage must land, not just the
 /// launcher, and `code` comes with it.
 #[test]

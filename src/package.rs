@@ -19,6 +19,7 @@ const CODE_REPO: &str = "codelovesme/code";
 const EUGLENA_REPO: &str = "codelovesme/euglena-cli";
 const IDE_REPO: &str = "codelovesme/ide";
 const CONSOLE_REPO: &str = "codelovesme/console";
+const MIKE_DESKTOP_REPO: &str = "codelovesme/mike-desktop";
 
 #[derive(Clone, Copy)]
 pub enum Package {
@@ -26,6 +27,7 @@ pub enum Package {
     Euglena,
     Ide,
     Console,
+    MikeDesktop,
 }
 
 impl Package {
@@ -35,6 +37,7 @@ impl Package {
             "euglena" => Some(Package::Euglena),
             "ide" => Some(Package::Ide),
             "console" => Some(Package::Console),
+            "mike-desktop" => Some(Package::MikeDesktop),
             _ => None,
         }
     }
@@ -45,6 +48,7 @@ impl Package {
             Package::Euglena => install_euglena(opts),
             Package::Ide => install_ide(opts),
             Package::Console => install_console(opts),
+            Package::MikeDesktop => install_mike_desktop(opts),
         }
     }
 
@@ -85,6 +89,15 @@ impl Package {
                 repo: CONSOLE_REPO.into(),
                 asset_base: "console".into(),
                 env_var: "CDLVSM_CONSOLE_VERSION".into(),
+                label: None,
+                link: false,
+                desktop: true,
+            },
+            Package::MikeDesktop => InstallMeta {
+                pkg: "mike-desktop".into(),
+                repo: MIKE_DESKTOP_REPO.into(),
+                asset_base: "mike-desktop".into(),
+                env_var: "CDLVSM_MIKE_DESKTOP_VERSION".into(),
                 label: None,
                 link: false,
                 desktop: true,
@@ -342,6 +355,34 @@ fn install_console(opts: &InstallOpts) -> Result<()> {
         verb: "Installed",
         old: None,
     })?;
+    Ok(())
+}
+
+/// Mike's Linux desktop companion is an interpreted Euglena bundle with its
+/// exact native modules beside it. Code is the only runtime dependency.
+fn install_mike_desktop(opts: &InstallOpts) -> Result<()> {
+    let tag = resolve_tag("CDLVSM_MIKE_DESKTOP_VERSION", MIKE_DESKTOP_REPO)?;
+    install_release(&ReleaseSpec {
+        pkg: "mike-desktop",
+        repo: MIKE_DESKTOP_REPO,
+        asset_base: "mike-desktop",
+        tag: &tag,
+        label: None,
+        link: opts.link,
+        desktop: opts.desktop,
+        env_var: "CDLVSM_MIKE_DESKTOP_VERSION",
+        verb: "Installed",
+        old: None,
+    })?;
+    if !paths::package_dir("code").exists() {
+        eprintln!();
+        eprintln!("mike-desktop runs on Code — installing it too...");
+        install_code(&InstallOpts {
+            tier: Tier::Sdk,
+            link: false,
+            desktop: false,
+        })?;
+    }
     Ok(())
 }
 
