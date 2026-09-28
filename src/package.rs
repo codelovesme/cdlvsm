@@ -6,7 +6,7 @@
 
 use std::fs;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use crate::download::{
     download, extract, find_stage, latest_tag, make_executable, mktemp, need, platform,
@@ -370,6 +370,7 @@ fn install_console(opts: &InstallOpts) -> Result<()> {
 /// exact native modules beside it. Code is the only runtime dependency.
 fn install_mike(opts: &InstallOpts, pkg: &str) -> Result<()> {
     let tag = resolve_tag("CDLVSM_MIKE_DESKTOP_VERSION", MIKE_DESKTOP_REPO)?;
+    ensure_mike_webkit()?;
     if !paths::package_dir("code").exists() {
         eprintln!();
         eprintln!("Mike needs Code 2.12.1 or newer — installing it too...");
@@ -398,6 +399,71 @@ fn install_mike(opts: &InstallOpts, pkg: &str) -> Result<()> {
         old: None,
     })?;
     Ok(())
+}
+
+/// Mike's focused window uses the distribution's WebKitGTK runtime. Install
+/// its packages as part of `cdlvsm install mike` on the two supported distro
+/// families, so a fresh desktop needs no undocumented second command.
+fn ensure_mike_webkit() -> Result<()> {
+    if mike_webkit_available() {
+        return Ok(());
+    }
+    let release = fs::read_to_string("/etc/os-release").unwrap_or_default();
+    let supported = release.lines().any(|line| {
+        line == "ID=debian"
+            || line == "ID=ubuntu"
+            || line.starts_with("ID_LIKE=") && line.contains("debian")
+    });
+    if !supported {
+        return fail("Mike's WebKitGTK window currently supports Debian and Ubuntu desktops. Install python3-gi and gir1.2-webkit2-4.1 for another distribution.");
+    }
+    need("apt-get")?;
+    let root = Command::new("id")
+        .arg("-u")
+        .output()
+        .map(|output| output.status.success() && output.stdout == b"0\n")
+        .unwrap_or(false);
+    let packages = ["python3-gi", "gir1.2-webkit2-4.1"];
+    eprintln!(
+        "Mike needs WebKitGTK; installing {}...",
+        packages.join(" and ")
+    );
+    let refreshed = if root {
+        Command::new("apt-get").args(["update", "-q"]).status()
+    } else {
+        Command::new("sudo")
+            .args(["apt-get", "update", "-q"])
+            .status()
+    };
+    if !matches!(refreshed, Ok(done) if done.success()) {
+        return fail("Mike could not refresh Debian/Ubuntu packages for WebKitGTK. Check apt access, then retry `cdlvsm install mike`.");
+    }
+    let status = if root {
+        Command::new("apt-get")
+            .args(["install", "-y", "--no-install-recommends"])
+            .args(packages)
+            .status()
+    } else {
+        Command::new("sudo")
+            .arg("apt-get")
+            .args(["install", "-y", "--no-install-recommends"])
+            .args(packages)
+            .status()
+    };
+    match status {
+        Ok(done) if done.success() && mike_webkit_available() => Ok(()),
+        _ => fail("Mike could not install WebKitGTK. On Debian or Ubuntu, install python3-gi and gir1.2-webkit2-4.1, then retry `cdlvsm install mike`."),
+    }
+}
+
+fn mike_webkit_available() -> bool {
+    Command::new("/usr/bin/python3")
+        .args(["-c", "import gi; gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1'); from gi.repository import Gtk, WebKit2"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn code_at_least_2_12_1() -> bool {
