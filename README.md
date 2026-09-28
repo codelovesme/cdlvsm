@@ -62,9 +62,10 @@ directory is installed, not only its binary.
 
 `cdlvsm install mike` brings in Code 2.12.1 or newer, upgrading an older
 managed Code install before adding the app. On supported Debian and Ubuntu
-desktops it also installs WebKitGTK and Python GI through apt when they are
-missing. The release includes its own pinned Euglena modules and connects
-directly to the public HTTPS service. Sign in through your browser when Mike
+desktops it also installs WebKitGTK, Python GI, and the document portal through
+apt when they are missing. The release includes its own pinned Euglena
+modules and connects directly to the public HTTPS service. Sign in through
+your browser when Mike
 asks to connect; there is no checkout or tunnel to set up.
 The earlier `mike-desktop` package name remains supported for existing users.
 

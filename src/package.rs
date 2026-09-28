@@ -401,11 +401,11 @@ fn install_mike(opts: &InstallOpts, pkg: &str) -> Result<()> {
     Ok(())
 }
 
-/// Mike's focused window uses the distribution's WebKitGTK runtime. Install
-/// its packages as part of `cdlvsm install mike` on the two supported distro
-/// families, so a fresh desktop needs no undocumented second command.
+/// Mike's focused window uses WebKitGTK and opens files by descriptor through
+/// the document portal. Install both through `cdlvsm install mike` on the two
+/// supported distro families so a fresh desktop needs no second command.
 fn ensure_mike_webkit() -> Result<()> {
-    if mike_webkit_available() {
+    if mike_webkit_available() && mike_portal_available() {
         return Ok(());
     }
     let release = fs::read_to_string("/etc/os-release").unwrap_or_default();
@@ -423,9 +423,14 @@ fn ensure_mike_webkit() -> Result<()> {
         .output()
         .map(|output| output.status.success() && output.stdout == b"0\n")
         .unwrap_or(false);
-    let packages = ["python3-gi", "gir1.2-webkit2-4.1"];
+    let packages = [
+        "python3-gi",
+        "gir1.2-webkit2-4.1",
+        "xdg-desktop-portal",
+        "xdg-desktop-portal-gtk",
+    ];
     eprintln!(
-        "Mike needs WebKitGTK; installing {}...",
+        "Mike needs WebKitGTK and the document portal; installing {}...",
         packages.join(" and ")
     );
     let refreshed = if root {
@@ -451,8 +456,8 @@ fn ensure_mike_webkit() -> Result<()> {
             .status()
     };
     match status {
-        Ok(done) if done.success() && mike_webkit_available() => Ok(()),
-        _ => fail("Mike could not install WebKitGTK. On Debian or Ubuntu, install python3-gi and gir1.2-webkit2-4.1, then retry `cdlvsm install mike`."),
+        Ok(done) if done.success() && mike_webkit_available() && mike_portal_available() => Ok(()),
+        _ => fail("Mike could not install WebKitGTK and the document portal. On Debian or Ubuntu, install python3-gi, gir1.2-webkit2-4.1, xdg-desktop-portal and xdg-desktop-portal-gtk, then retry `cdlvsm install mike`."),
     }
 }
 
@@ -464,6 +469,21 @@ fn mike_webkit_available() -> bool {
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success())
+}
+
+fn mike_portal_available() -> bool {
+    ["xdg-desktop-portal", "xdg-desktop-portal-gtk"]
+        .into_iter()
+        .all(|package| {
+            Command::new("dpkg-query")
+                .args(["-W", "-f=${Status}", package])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .output()
+                .is_ok_and(|result| {
+                    result.status.success() && result.stdout == b"install ok installed"
+                })
+        })
 }
 
 fn code_at_least_2_12_1() -> bool {
