@@ -45,7 +45,7 @@ cdlvsm <package> <args...>       run an installed package's binary
 | `code`    | the [Code](https://github.com/codelovesme/code) language toolchain |
 | `euglena` | the [euglena](https://github.com/codelovesme/euglena-cli) app CLI (scaffold/run/build Euglena apps) |
 | `ide`     | the [codelovesme IDE](https://github.com/codelovesme/ide), in the terminal — `cdlvsm ide [folder]` |
-| `mike-desktop` | [Mike Desktop](https://github.com/codelovesme/mike-desktop), Mike's native Linux interface — `cdlvsm mike-desktop` |
+| `mike` | [Mike](https://github.com/codelovesme/mike-desktop), your Euglena assistant on Linux — `cdlvsm mike` |
 
 `euglena` runs apps through the `code` interpreter, so `cdlvsm install
 euglena` also installs `code` (SDK tier, no `--link`) if it isn't already
@@ -60,8 +60,11 @@ and the modules it links, run by the `code` interpreter — so `cdlvsm install
 ide` also installs `code` if it isn't there. Every package's whole release
 directory is installed, not only its binary.
 
-`mike-desktop` is also a bundle. Its install brings in Code 2.11 or newer,
-upgrading an older managed Code install before adding the app.
+`cdlvsm install mike` brings in Code 2.12.1 or newer, upgrading an older
+managed Code install before adding the app. The release includes its own
+pinned Euglena modules and connects directly to the public HTTPS service.
+Sign in with your existing account; there is no checkout or tunnel to set up.
+The earlier `mike-desktop` package name remains supported for existing users.
 
 ### Apps in the desktop's menu
 

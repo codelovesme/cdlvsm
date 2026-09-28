@@ -82,9 +82,9 @@ fn builtin(pkg: &str) -> Option<App> {
             "System;TerminalEmulator;",
             "terminal;shell;command;codelovesme;",
         )),
-        "mike-desktop" => Some(app(
-            "Mike Desktop",
-            "Talk to Mike and approve local desktop tasks",
+        "mike" | "mike-desktop" => Some(app(
+            "Mike",
+            "Your assistant and desktop interface to Euglena",
             false,
             "computer",
             "Utility;",

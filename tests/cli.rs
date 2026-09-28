@@ -650,20 +650,20 @@ fn console_is_a_known_package() {
 #[test]
 fn mike_desktop_is_a_known_package() {
     let p = tmp_prefix("mike_desktop_known");
-    let o = run(&p, &["mike-desktop"]);
+    let o = run(&p, &["mike"]);
     assert_eq!(o.code, 1);
     assert!(
-        o.stderr.contains("run `cdlvsm install mike-desktop` first"),
+        o.stderr.contains("run `cdlvsm install mike` first"),
         "stderr: {}",
         o.stderr
     );
     let o = run(&p, &["help"]);
     assert!(
-        o.stdout
-            .contains("mike-desktop  Mike's Linux desktop companion"),
+        o.stdout.contains("mike      Mike's desktop app"),
         "help: {}",
         o.stdout
     );
+    assert!(o.stdout.contains("mike-desktop  legacy name for Mike"));
 }
 
 #[test]
@@ -683,37 +683,35 @@ fn real_install_mike_desktop_bundle() {
         "old Code install failed: {}",
         old_code.stderr
     );
-    let o = run(&p, &["install", "mike-desktop"]);
+    let o = run(&p, &["install", "mike"]);
     assert_eq!(o.code, 0, "install failed: {}", o.stderr);
     assert_ne!(
         fs::read_link(p.join("share/cdlvsm/packages/code/current")).unwrap(),
         PathBuf::from("v2.10.0"),
         "Mike Desktop should upgrade an older Code runtime"
     );
-    let current = p.join("share/cdlvsm/packages/mike-desktop/current");
+    let current = p.join("share/cdlvsm/packages/mike/current");
     for file in [
+        "mike",
         "mike-desktop",
         "main.code",
-        "net_client.so",
+        "http_client.so",
+        "json.so",
         "window.so",
         "src/desktop.gene.code",
     ] {
         assert!(current.join(file).exists(), "bundle is missing {file}");
     }
-    let entry = p.join("xdg-data/applications/codelovesme-mike-desktop.desktop");
+    let entry = p.join("xdg-data/applications/codelovesme-mike.desktop");
     let text = fs::read_to_string(&entry).expect("desktop launcher entry");
-    assert!(text.contains("Name=Mike Desktop"), "{text}");
+    assert!(text.contains("Name=Mike"), "{text}");
     assert!(text.contains("Terminal=false"), "{text}");
-    let o = run(&p, &["mike-desktop", "--version"]);
+    let o = run(&p, &["mike", "--version"]);
     assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
-    assert!(
-        o.stdout.starts_with("mike-desktop v"),
-        "stdout: {}",
-        o.stdout
-    );
-    let o = run(&p, &["upgrade", "mike-desktop"]);
+    assert!(o.stdout.starts_with("Mike v"), "stdout: {}", o.stdout);
+    let o = run(&p, &["upgrade", "mike"]);
     assert_eq!(o.code, 0, "upgrade failed: {}", o.stderr);
-    let o = run(&p, &["uninstall", "mike-desktop"]);
+    let o = run(&p, &["uninstall", "mike"]);
     assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
     assert!(!entry.exists(), "uninstall takes the launcher entry away");
 }

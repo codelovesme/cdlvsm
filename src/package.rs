@@ -27,6 +27,7 @@ pub enum Package {
     Euglena,
     Ide,
     Console,
+    Mike,
     MikeDesktop,
 }
 
@@ -37,6 +38,7 @@ impl Package {
             "euglena" => Some(Package::Euglena),
             "ide" => Some(Package::Ide),
             "console" => Some(Package::Console),
+            "mike" => Some(Package::Mike),
             "mike-desktop" => Some(Package::MikeDesktop),
             _ => None,
         }
@@ -48,7 +50,8 @@ impl Package {
             Package::Euglena => install_euglena(opts),
             Package::Ide => install_ide(opts),
             Package::Console => install_console(opts),
-            Package::MikeDesktop => install_mike_desktop(opts),
+            Package::Mike => install_mike(opts, "mike"),
+            Package::MikeDesktop => install_mike(opts, "mike-desktop"),
         }
     }
 
@@ -93,8 +96,13 @@ impl Package {
                 link: false,
                 desktop: true,
             },
-            Package::MikeDesktop => InstallMeta {
-                pkg: "mike-desktop".into(),
+            Package::Mike | Package::MikeDesktop => InstallMeta {
+                pkg: (if matches!(self, Package::Mike) {
+                    "mike"
+                } else {
+                    "mike-desktop"
+                })
+                .into(),
                 repo: MIKE_DESKTOP_REPO.into(),
                 asset_base: "mike-desktop".into(),
                 env_var: "CDLVSM_MIKE_DESKTOP_VERSION".into(),
@@ -360,25 +368,25 @@ fn install_console(opts: &InstallOpts) -> Result<()> {
 
 /// Mike's Linux desktop companion is an interpreted Euglena bundle with its
 /// exact native modules beside it. Code is the only runtime dependency.
-fn install_mike_desktop(opts: &InstallOpts) -> Result<()> {
+fn install_mike(opts: &InstallOpts, pkg: &str) -> Result<()> {
     let tag = resolve_tag("CDLVSM_MIKE_DESKTOP_VERSION", MIKE_DESKTOP_REPO)?;
     if !paths::package_dir("code").exists() {
         eprintln!();
-        eprintln!("mike-desktop needs Code 2.11 or newer — installing it too...");
+        eprintln!("Mike needs Code 2.12.1 or newer — installing it too...");
         install_code(&InstallOpts {
             tier: Tier::Sdk,
             link: false,
             desktop: false,
         })?;
-    } else if !code_at_least_2_11() {
-        eprintln!("mike-desktop needs Code 2.11 or newer — upgrading Code...");
+    } else if !code_at_least_2_12_1() {
+        eprintln!("Mike needs Code 2.12.1 or newer — upgrading Code...");
         upgrade("code")?;
     }
-    if !code_at_least_2_11() {
-        return fail("mike-desktop needs Code 2.11 or newer; check CDLVSM_CODE_VERSION");
+    if !code_at_least_2_12_1() {
+        return fail("Mike needs Code 2.12.1 or newer; check CDLVSM_CODE_VERSION");
     }
     install_release(&ReleaseSpec {
-        pkg: "mike-desktop",
+        pkg,
         repo: MIKE_DESKTOP_REPO,
         asset_base: "mike-desktop",
         tag: &tag,
@@ -392,7 +400,7 @@ fn install_mike_desktop(opts: &InstallOpts) -> Result<()> {
     Ok(())
 }
 
-fn code_at_least_2_11() -> bool {
+fn code_at_least_2_12_1() -> bool {
     let Ok(target) = fs::read_link(paths::current_link("code")) else {
         return false;
     };
@@ -400,7 +408,8 @@ fn code_at_least_2_11() -> bool {
     let mut parts = tag.trim_start_matches('v').split('.');
     let major = parts.next().and_then(|p| p.parse::<u64>().ok());
     let minor = parts.next().and_then(|p| p.parse::<u64>().ok());
-    matches!((major, minor), (Some(major), Some(minor)) if major > 2 || major == 2 && minor >= 11)
+    let patch = parts.next().and_then(|p| p.parse::<u64>().ok());
+    matches!((major, minor, patch), (Some(major), Some(minor), Some(patch)) if major > 2 || major == 2 && (minor > 12 || minor == 12 && patch >= 1))
 }
 
 /// euglena hard-depends on the `code` interpreter to run apps. Install it too

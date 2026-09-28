@@ -225,13 +225,16 @@ fn print_usage() {
     println!("  euglena   the Euglena app CLI (scaffold/run/build Euglena apps)");
     println!("  ide       the codelovesme IDE, in the terminal: `cdlvsm ide [folder]`");
     println!("  console   the codelovesme console, a terminal in its own window: `cdlvsm console`");
-    println!("  mike-desktop  Mike's Linux desktop companion: `cdlvsm mike-desktop`");
+    println!("  mike      Mike's desktop app: `cdlvsm mike`");
+    println!("  mike-desktop  legacy name for Mike");
     println!();
     println!("Flags:");
     println!("  --runtime   install code's Runtime tier instead of the default SDK tier");
     println!("  --link      also create a bare `<package>` command in $PREFIX/bin (opt-in;");
     println!("              for `code` this avoids colliding with VS Code's own `code` CLI)");
-    println!("  --no-desktop  an app (ide, console, mike-desktop) is not added to the desktop's applications");
+    println!(
+        "  --no-desktop  an app (ide, console, mike) is not added to the desktop's applications"
+    );
     println!("              menu / search (it is by default; Linux and macOS)");
     println!();
     println!("  `upgrade` takes no flags — it reuses the recorded install settings.");
@@ -246,6 +249,6 @@ fn print_usage() {
     println!("  CDLVSM_EUGLENA_VERSION   pin euglena's version instead of latest");
     println!("  CDLVSM_IDE_VERSION       pin ide's version instead of latest");
     println!("  CDLVSM_CONSOLE_VERSION   pin console's version instead of latest");
-    println!("  CDLVSM_MIKE_DESKTOP_VERSION   pin Mike Desktop's version instead of latest");
+    println!("  CDLVSM_MIKE_DESKTOP_VERSION   pin Mike's version instead of latest");
     println!("  CDLVSM_CLI_VERSION       pin cdlvsm's own version for `update` (e.g. v0.3.0)");
 }
