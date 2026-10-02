@@ -227,13 +227,15 @@ fn print_usage() {
     println!("  console   the codelovesme console, a terminal in its own window: `cdlvsm console`");
     println!("  mike      Mike's desktop app: `cdlvsm mike`");
     println!("  mike-desktop  legacy name for Mike");
+    println!("  todo      To Do in a window of its own: `cdlvsm todo`");
+    println!("  home      Home in a window of its own: `cdlvsm home`");
     println!();
     println!("Flags:");
     println!("  --runtime   install code's Runtime tier instead of the default SDK tier");
     println!("  --link      also create a bare `<package>` command in $PREFIX/bin (opt-in;");
     println!("              for `code` this avoids colliding with VS Code's own `code` CLI)");
     println!(
-        "  --no-desktop  an app (ide, console, mike) is not added to the desktop's applications"
+        "  --no-desktop  an app (ide, console, mike, todo, home) is not added to the desktop's applications"
     );
     println!("              menu / search (it is by default; Linux and macOS)");
     println!();
@@ -250,5 +252,7 @@ fn print_usage() {
     println!("  CDLVSM_IDE_VERSION       pin ide's version instead of latest");
     println!("  CDLVSM_CONSOLE_VERSION   pin console's version instead of latest");
     println!("  CDLVSM_MIKE_DESKTOP_VERSION   pin Mike's version instead of latest");
+    println!("  CDLVSM_TODO_VERSION      pin the To Do window's version instead of latest");
+    println!("  CDLVSM_HOME_VERSION      pin the Home window's version instead of latest");
     println!("  CDLVSM_CLI_VERSION       pin cdlvsm's own version for `update` (e.g. v0.3.0)");
 }

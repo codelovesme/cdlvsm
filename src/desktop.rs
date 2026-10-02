@@ -90,6 +90,22 @@ fn builtin(pkg: &str) -> Option<App> {
             "Utility;",
             "Mike;assistant;desktop;Euglena;",
         )),
+        "todo" => Some(app(
+            "To Do",
+            "Your tasks, in a window of their own",
+            false,
+            "checkbox-checked",
+            "Office;",
+            "tasks;todo;list;codelovesme;",
+        )),
+        "home" => Some(app(
+            "Home",
+            "Your house — sensors, devices and rules — in a window of its own",
+            false,
+            "go-home",
+            "Utility;",
+            "home;house;smart;sensors;codelovesme;",
+        )),
         _ => None,
     }
 }

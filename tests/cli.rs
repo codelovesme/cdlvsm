@@ -752,3 +752,56 @@ fn real_install_ide_bundle() {
     assert!(!p.join("bin/cdlvsm-ide").exists());
     assert!(!entry.exists(), "uninstall takes the launcher entry away");
 }
+
+#[test]
+fn todo_and_home_windows_are_known_packages() {
+    let p = tmp_prefix("desktop_apps_known");
+    for pkg in ["todo", "home"] {
+        let o = run(&p, &[pkg]);
+        assert_eq!(o.code, 1);
+        assert!(
+            o.stderr
+                .contains(&format!("run `cdlvsm install {pkg}` first")),
+            "stderr: {}",
+            o.stderr
+        );
+    }
+    let o = run(&p, &["help"]);
+    assert!(
+        o.stdout.contains("todo      To Do in a window"),
+        "help: {}",
+        o.stdout
+    );
+    assert!(
+        o.stdout.contains("home      Home in a window"),
+        "help: {}",
+        o.stdout
+    );
+}
+
+/// To Do's window from codelovesme/desktop-apps: the launcher, the shared
+/// window and the app's description land, with a menu entry.
+#[test]
+fn real_install_todo_window() {
+    if std::env::var("CDLVSM_NETWORK_TESTS").as_deref() != Ok("1") {
+        eprintln!("skipping network test (set CDLVSM_NETWORK_TESTS=1 to run)");
+        return;
+    }
+    let p = tmp_prefix("real_todo_window");
+    let o = run(&p, &["install", "todo"]);
+    assert_eq!(o.code, 0, "install failed: {}", o.stderr);
+    let current = p.join("share/cdlvsm/packages/todo/current");
+    for file in ["todo", "app_window.py", "app.conf", "app.info", "icon.svg"] {
+        assert!(current.join(file).exists(), "bundle is missing {file}");
+    }
+    let entry = p.join("xdg-data/applications/codelovesme-todo.desktop");
+    let text = fs::read_to_string(&entry).expect("desktop launcher entry");
+    assert!(text.contains("Name=To Do"), "{text}");
+    assert!(text.contains("Terminal=false"), "{text}");
+    let o = run(&p, &["todo", "--version"]);
+    assert_eq!(o.code, 0, "dispatch failed: {}", o.stderr);
+    assert!(o.stdout.starts_with("To Do v"), "stdout: {}", o.stdout);
+    let o = run(&p, &["uninstall", "todo"]);
+    assert_eq!(o.code, 0, "uninstall failed: {}", o.stderr);
+    assert!(!entry.exists(), "uninstall takes the launcher entry away");
+}

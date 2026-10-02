@@ -20,6 +20,9 @@ const EUGLENA_REPO: &str = "codelovesme/euglena-cli";
 const IDE_REPO: &str = "codelovesme/ide";
 const CONSOLE_REPO: &str = "codelovesme/console";
 const MIKE_DESKTOP_REPO: &str = "codelovesme/mike-desktop";
+/// One codelovesme web application in a desktop window of its own — one
+/// repository, one release asset per application (`todo-…`, `home-…`).
+const DESKTOP_APPS_REPO: &str = "codelovesme/desktop-apps";
 
 #[derive(Clone, Copy)]
 pub enum Package {
@@ -29,6 +32,8 @@ pub enum Package {
     Console,
     Mike,
     MikeDesktop,
+    Todo,
+    Home,
 }
 
 impl Package {
@@ -40,6 +45,8 @@ impl Package {
             "console" => Some(Package::Console),
             "mike" => Some(Package::Mike),
             "mike-desktop" => Some(Package::MikeDesktop),
+            "todo" => Some(Package::Todo),
+            "home" => Some(Package::Home),
             _ => None,
         }
     }
@@ -52,6 +59,8 @@ impl Package {
             Package::Console => install_console(opts),
             Package::Mike => install_mike(opts, "mike"),
             Package::MikeDesktop => install_mike(opts, "mike-desktop"),
+            Package::Todo => install_desktop_app(opts, "todo", "CDLVSM_TODO_VERSION"),
+            Package::Home => install_desktop_app(opts, "home", "CDLVSM_HOME_VERSION"),
         }
     }
 
@@ -110,6 +119,22 @@ impl Package {
                 link: false,
                 desktop: true,
             },
+            Package::Todo | Package::Home => {
+                let pkg = if matches!(self, Package::Todo) {
+                    "todo"
+                } else {
+                    "home"
+                };
+                InstallMeta {
+                    pkg: pkg.into(),
+                    repo: DESKTOP_APPS_REPO.into(),
+                    asset_base: pkg.into(),
+                    env_var: format!("CDLVSM_{}_VERSION", pkg.to_uppercase()),
+                    label: None,
+                    link: false,
+                    desktop: true,
+                }
+            }
         }
     }
 }
@@ -401,11 +426,40 @@ fn install_mike(opts: &InstallOpts, pkg: &str) -> Result<()> {
     Ok(())
 }
 
+/// To Do or Home in a window of its own: the shared WebKit window from
+/// codelovesme/desktop-apps. It needs WebKitGTK and Python, nothing else —
+/// no Code runtime, no device pairing; the page talks to its server as it
+/// does in a browser.
+fn install_desktop_app(opts: &InstallOpts, pkg: &str, env_var: &str) -> Result<()> {
+    let tag = resolve_tag(env_var, DESKTOP_APPS_REPO)?;
+    ensure_webkit(pkg, false)?;
+    install_release(&ReleaseSpec {
+        pkg,
+        repo: DESKTOP_APPS_REPO,
+        asset_base: pkg,
+        tag: &tag,
+        label: None,
+        link: opts.link,
+        desktop: opts.desktop,
+        env_var,
+        verb: "Installed",
+        old: None,
+    })?;
+    Ok(())
+}
+
 /// Mike's focused window uses WebKitGTK and opens files by descriptor through
 /// the document portal. Install both through `cdlvsm install mike` on the two
 /// supported distro families so a fresh desktop needs no second command.
 fn ensure_mike_webkit() -> Result<()> {
-    if mike_webkit_available() && mike_portal_available() {
+    ensure_webkit("mike", true)
+}
+
+/// WebKitGTK for a window app (and, for Mike, the document portal), from
+/// apt on Debian and Ubuntu — the two families these windows support.
+fn ensure_webkit(pkg: &str, portal: bool) -> Result<()> {
+    let app = if pkg == "mike" { "Mike" } else { pkg };
+    if mike_webkit_available() && (!portal || mike_portal_available()) {
         return Ok(());
     }
     let release = fs::read_to_string("/etc/os-release").unwrap_or_default();
@@ -415,7 +469,7 @@ fn ensure_mike_webkit() -> Result<()> {
             || line.starts_with("ID_LIKE=") && line.contains("debian")
     });
     if !supported {
-        return fail("Mike's WebKitGTK window currently supports Debian and Ubuntu desktops. Install python3-gi and gir1.2-webkit2-4.1 for another distribution.");
+        return fail(format!("{app}'s WebKitGTK window currently supports Debian and Ubuntu desktops. Install python3-gi and gir1.2-webkit2-4.1 for another distribution."));
     }
     need("apt-get")?;
     let root = Command::new("id")
@@ -423,14 +477,12 @@ fn ensure_mike_webkit() -> Result<()> {
         .output()
         .map(|output| output.status.success() && output.stdout == b"0\n")
         .unwrap_or(false);
-    let packages = [
-        "python3-gi",
-        "gir1.2-webkit2-4.1",
-        "xdg-desktop-portal",
-        "xdg-desktop-portal-gtk",
-    ];
+    let mut packages = vec!["python3-gi", "gir1.2-webkit2-4.1"];
+    if portal {
+        packages.extend(["xdg-desktop-portal", "xdg-desktop-portal-gtk"]);
+    }
     eprintln!(
-        "Mike needs WebKitGTK and the document portal; installing {}...",
+        "{app} needs WebKitGTK; installing {}...",
         packages.join(" and ")
     );
     let refreshed = if root {
@@ -441,23 +493,23 @@ fn ensure_mike_webkit() -> Result<()> {
             .status()
     };
     if !matches!(refreshed, Ok(done) if done.success()) {
-        return fail("Mike could not refresh Debian/Ubuntu packages for WebKitGTK. Check apt access, then retry `cdlvsm install mike`.");
+        return fail(format!("{app} could not refresh Debian/Ubuntu packages for WebKitGTK. Check apt access, then retry `cdlvsm install {pkg}`."));
     }
     let status = if root {
         Command::new("apt-get")
             .args(["install", "-y", "--no-install-recommends"])
-            .args(packages)
+            .args(&packages)
             .status()
     } else {
         Command::new("sudo")
             .arg("apt-get")
             .args(["install", "-y", "--no-install-recommends"])
-            .args(packages)
+            .args(&packages)
             .status()
     };
     match status {
-        Ok(done) if done.success() && mike_webkit_available() && mike_portal_available() => Ok(()),
-        _ => fail("Mike could not install WebKitGTK and the document portal. On Debian or Ubuntu, install python3-gi, gir1.2-webkit2-4.1, xdg-desktop-portal and xdg-desktop-portal-gtk, then retry `cdlvsm install mike`."),
+        Ok(done) if done.success() && mike_webkit_available() && (!portal || mike_portal_available()) => Ok(()),
+        _ => fail(format!("{app} could not install WebKitGTK. On Debian or Ubuntu, install {}, then retry `cdlvsm install {pkg}`.", packages.join(", "))),
     }
 }
 
